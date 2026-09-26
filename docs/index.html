@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#240911">
+<title>Reel Duel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;900&family=Archivo:wght@400;500;700&family=Courier+Prime:wght@400;700&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main id="app">
+  <header class="marquee">
+    <div class="sign">
+      <span class="brand">Reel Duel</span>
+      <span class="phase" id="phase">Tonight's pick</span>
+    </div>
+    <div class="meter">
+      <div class="bulbs" id="bulbs" role="meter" aria-label="Certainty" aria-valuemin="0" aria-valuemax="12" aria-valuenow="0"></div>
+      <span class="meter-label">Certainty</span>
+    </div>
+  </header>
+
+  <section class="screen start" id="screen-start">
+    <div class="sample" id="sample" aria-hidden="true"></div>
+    <h1>Two movies. Pick one. Repeat.</h1>
+    <p class="lede">Each tap teaches Reel Duel what you're in the mood for. In about a dozen picks it narrows 1,500 popular films to the one you should watch tonight.</p>
+    <fieldset class="eras">
+      <legend>Era</legend>
+      <label><input type="radio" name="era" id="era-any" value="any" checked><span>Any</span></label>
+      <label><input type="radio" name="era" id="era-old" value="old"><span>Before 1980</span></label>
+      <label><input type="radio" name="era" id="era-mid" value="mid"><span>1980–1999</span></label>
+      <label><input type="radio" name="era" id="era-new" value="new"><span>2000 on</span></label>
+    </fieldset>
+    <button class="btn-primary" id="start" type="button">Start the duel</button>
+    <p class="howto">Tap the ticket you'd rather watch. Mark <b>Seen it</b> to swap a movie out.</p>
+  </section>
+
+  <section class="screen duel" id="screen-duel" hidden>
+    <p class="leaning" id="leaning"></p>
+    <div class="arena">
+      <div class="slot" id="slotA"></div>
+      <div class="vs" aria-hidden="true">or</div>
+      <div class="slot" id="slotB"></div>
+    </div>
+    <div class="controls">
+      <button class="btn-ghost" id="undo" type="button" disabled>Undo</button>
+      <button class="btn-ghost" id="neither" type="button">Neither</button>
+    </div>
+  </section>
+
+  <section class="screen win" id="screen-win" hidden>
+    <p class="now">Now showing</p>
+    <h1 class="board" id="win-title"></h1>
+    <p class="win-meta" id="win-meta"></p>
+    <div class="why" id="win-why"></div>
+    <div class="links" id="win-links"></div>
+    <div class="taste">
+      <h2>Your taste tonight</h2>
+      <div class="taste-row"><span class="taste-label">More of</span><div class="chips" id="taste-more"></div></div>
+      <div class="taste-row"><span class="taste-label">Less of</span><div class="chips" id="taste-less"></div></div>
+    </div>
+    <div class="runners">
+      <h2>Also in the running</h2>
+      <ol id="runners"></ol>
+    </div>
+    <div class="win-actions">
+      <button class="btn-ghost" id="seen-winner" type="button">Seen it, next pick</button>
+      <button class="btn-primary" id="again" type="button">New duel</button>
+    </div>
+  </section>
+
+  <footer class="credit">Movie data: MovieLens 25M, GroupLens Research, University of Minnesota. Non-commercial project.</footer>
+</main>
+<script src="movies.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
