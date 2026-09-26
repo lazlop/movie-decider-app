@@ -1,2 +1,6 @@
 raw/
 .artifact/
+.env
+cache/
+.venv/
+__pycache__/
