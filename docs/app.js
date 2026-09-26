@@ -146,8 +146,8 @@
       pVar: new Float64Array(P).fill(PERSON_PRIOR_VAR),
       round: 0,
       phase: "warm",
-      out: new Set(),       // lost a duel, rejected, or seen
-      seen: new Set(),
+      out: new Set(),       // lost a duel, rejected, or skipped
+      seen: new Set(),      // skipped or marked seen: never listed as a runner-up
       shows: {},
       pair: null,
       bracket: null,
@@ -390,7 +390,8 @@
     animateOut(-1, nextPair);
   }
 
-  function seen(slot) {
+  // Swap one movie out without learning anything from it.
+  function skip(slot) {
     if (busy || !st.pair) return;
     history.push(snapshot());
     const goneId = st.pair[slot], keep = movies[st.pair[1 - slot]];
@@ -470,7 +471,7 @@
           <div class="tags">${esc(tags)}</div>
           <div class="foot">
             <span>★ ${m.score.toFixed(1)} · ${fmtRuntime(m.runtime)}</span>
-            ${interactive ? `<button class="seen" type="button">Seen it</button>` : `<span>${fmtCount(m.votes)} votes</span>`}
+            ${interactive ? `<button class="skip" type="button">Skip</button>` : `<span>${fmtCount(m.votes)} votes</span>`}
           </div>
         </div>
         ${poster}
@@ -484,7 +485,7 @@
     const t = el.querySelector(".ticket");
     if (enter && !reduceMotion()) t.classList.add("enter");
     t.addEventListener("click", (e) => {
-      if (e.target.closest(".seen")) return seen(slot);
+      if (e.target.closest(".skip")) return skip(slot);
       pick(slot);
     });
     t.addEventListener("keydown", (e) => {
@@ -607,7 +608,7 @@
   }
 
   // ---------- start screen: year range ----------
-  const yrFrom = $("yr-from"), yrTo = $("yr-to"), skip = $("skip-theaters"), actors = $("use-actors");
+  const yrFrom = $("yr-from"), yrTo = $("yr-to"), theatersBox = $("skip-theaters"), actors = $("use-actors");
 
   function renderFilters() {
     yrFrom.value = filters.from;
@@ -618,7 +619,7 @@
     const fill = $("dual-fill");
     fill.style.left = `${((filters.from - YEAR_MIN) / span) * 100}%`;
     fill.style.right = `${((YEAR_MAX - filters.to) / span) * 100}%`;
-    skip.checked = filters.skipTheaters;
+    theatersBox.checked = filters.skipTheaters;
     actors.checked = filters.actors;
     const n = movies.filter((m) => inRange(m, filters)).length;
     $("yr-count").textContent = `${n.toLocaleString()} movies`;
@@ -655,7 +656,7 @@
     // When both thumbs meet, keep the one that can still move on top.
     yrFrom.addEventListener("pointerdown", () => { yrFrom.style.zIndex = 2; yrTo.style.zIndex = 1; });
     yrTo.addEventListener("pointerdown", () => { yrTo.style.zIndex = 2; yrFrom.style.zIndex = 1; });
-    skip.addEventListener("change", () => { filters.skipTheaters = skip.checked; renderFilters(); });
+    theatersBox.addEventListener("change", () => { filters.skipTheaters = theatersBox.checked; renderFilters(); });
     actors.addEventListener("change", () => { filters.actors = actors.checked; renderFilters(); });
     renderFilters();
   }

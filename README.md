@@ -69,7 +69,9 @@ from the same few years (new releases haven't had time to collect votes).
 - **Final four (decide).** The game moves on once one film wins at least 30% of
   posterior draws after 7 or more rounds, or at round 12. The four likeliest films
   then play two semifinals and a final.
-- **Seen it** swaps a movie out. **Neither** counts as a mild vote against both.
+- **Skip** swaps a movie out without learning from it (for films you can't judge;
+  films you've seen are worth voting on). **Neither** counts as a mild vote against
+  both. Under the winning movie, **Seen it? Show the next pick** moves to the next-best film.
 - **Release years** and **Skip movies still in theaters** limit the pool.
   "In theaters" means on TMDB's now-playing list, or released in the last ~2 months.
 

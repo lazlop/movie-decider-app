@@ -54,7 +54,7 @@
       </label>
     </fieldset>
     <button class="btn-primary" id="start" type="button">Start the duel</button>
-    <p class="howto">Tap the ticket you'd rather watch. Tap <b>Seen it</b> to swap a movie out.</p>
+    <p class="howto">Tap the ticket you'd rather watch. Seen one already? Vote anyway, it shows what you like. Tap <b>Skip</b> to swap out a movie you can't judge.</p>
   </section>
 
   <section class="screen duel" id="screen-duel" hidden>
@@ -74,6 +74,7 @@
     <p class="now">Now showing</p>
     <h1 class="board" id="win-title"></h1>
     <p class="win-meta" id="win-meta"></p>
+    <button class="btn-ghost seen-next" id="seen-winner" type="button">Seen it? Show the next pick</button>
     <div class="why" id="win-why"></div>
     <div class="links" id="win-links"></div>
     <div class="taste">
@@ -87,7 +88,6 @@
       <ol id="runners"></ol>
     </div>
     <div class="win-actions">
-      <button class="btn-ghost" id="seen-winner" type="button">Seen it, next pick</button>
       <button class="btn-primary" id="again" type="button">New duel</button>
     </div>
   </section>
