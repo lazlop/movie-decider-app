@@ -125,10 +125,10 @@ Things to keep in mind:
   obscure titles) get predicted taste profiles, which are rougher. Bigger pools
   and newer-leaning steps raise that share; the build prints it ("predicting N").
 - **The warm-up** always draws from the best-known ~30% of whatever is in range
-  (by vote count, whatever the **Favor** setting), so a bigger pool doesn't make
-  the first rounds more obscure. Films shown in
-  recent warm-ups on the same device are held back, and the next most-voted
-  films take their place.
+  (by vote count, whatever the **Favor** setting), and the opening lineup from
+  the best-known ~40%, so a bigger pool doesn't make the first rounds more
+  obscure. Films shown in recent lineups and warm-ups on the same device are
+  held back, and the next most-voted films take their place.
 
 ### Game behavior: constants in `docs/app.js`
 
@@ -136,11 +136,14 @@ Change these, commit, and GitHub Pages serves the new behavior. No rebuild neede
 
 | Constant | Default | What it does |
 |---|---|---|
-| `WARMUP_ROUNDS` | `3` | Rounds of pure exploration before narrowing. |
+| `WARMUP_ROUNDS` | `3` | Rounds of pure exploration before narrowing, counting the opening lineup. |
+| `LINEUP_SIZE` | `6` | Films in the opening lineup, each with a different vibe. |
+| `LINEUP_SCALE` | `1.5` | Softens the lineup pick's five comparisons (higher = each counts for less). They all come from one tap, so at full strength they'd make the game too sure of itself too early. |
+| `PRIMARY_VIBE` / `vibeOf()` | 10 vibes | How films get their lineup label (Animated, Rom-com, Sci-fi, Action, Comedy, Horror, Thriller, Romance, Adventure, Drama), mostly from the film's first-listed TMDB genre. |
 | `POPULARITY` | `+0.3` / `0` / `−0.3` | The start screen's **Favor** options: the starting popularity weight (per standard deviation of popularity). Balanced is the default; Popular starts about where the game did before the option existed. |
 | `POP_PRIOR_VAR` | `0.1` | How far picks can move the popularity weight from where Favor started it. `0` fixes it at the Favor value. |
 | `WARM_CHOICES` | `20` | Each warm-up pair is picked at random from this many of the most informative candidates. `1` always shows the single best pair (the same few films every game); higher means more variety and slightly less informative openers. |
-| `RECENT_MAX` / `RECENT_DAYS` | `36` / `14` | Warm-up films remembered in the browser (localStorage) and held out of the next games' warm-ups: at most this many films, each for at most this many days. |
+| `RECENT_MAX` / `RECENT_DAYS` | `60` / `14` | Lineup and warm-up films remembered in the browser (localStorage) and held out of the next games' lineups and warm-ups: at most this many films, each for at most this many days. |
 | `MIN_ROUNDS` / `MAX_ROUNDS` | `7` / `12` | Earliest round the final four can start, and the round it starts regardless. Lower both for shorter games. |
 | `LEADER_SHARE` | `0.3` | How often one film must come out on top across 200 imagined versions of you to end narrowing early. Higher means longer, surer games. |
 | `MAX_SHOWS` | `3` | How many times one film can appear in a game. |
@@ -228,13 +231,17 @@ game; the winner can come back (each film appears at most 3 times).
 
 | Phase | Rounds | Goal | How the two movies are chosen |
 |---|---|---|---|
-| **Warm-up** | 1–3 | Explore | From the best-known ~30% of the pool (40–300 films), it tries 400 random pairs and shows one of the 20 it would learn the most from (films from recent warm-ups on this device are held back): two films where your pick is hard to predict *and* would move the uncertain weights. In practice that means very different films. |
+| **Opening lineup** | 1 | Explore | Six well-known films (from the best-known ~40% of the pool), each with a different vibe: six of Animated, Rom-com, Sci-fi, Action, Comedy, Horror, Thriller, Romance, Adventure and Drama, chosen at random. Within those vibes, films are added one at a time, each as far as possible in taste space from the ones already chosen (one of the 3 farthest, for variety). Your pick counts as beating each of the other five, at reduced strength, and the five leave the game. **Skip** goes straight to the pairs, and then the warm-up runs all 3 rounds. |
+| **Warm-up** | 2–3 | Explore | From the best-known ~30% of the pool (40–300 films), it tries 400 random pairs and shows one of the 20 it would learn the most from (films from recent warm-ups on this device are held back): two films where your pick is hard to predict *and* would move the uncertain weights. In practice that means very different films. |
 | **Narrowing** | 4 up to 12 | Explore and decide | **Double Thompson sampling.** It draws two plausible versions of "you" from its current uncertainty and shows each one's favorite film. While it's unsure, the two draws disagree and you see varied options; as it gets sure, they converge on the same corner of the map. If both draws pick the same film, it pairs that film with the most informative challenger. About 15% of the time it redraws the challenger anyway, for variety. |
 | **Final four** | 3 more picks | Decide | Starts once one film is the favorite in at least 30% of 200 imagined versions of you (from round 7 on), or at round 12 regardless. The four films that win most often are seeded 1–4 and play 1 vs 4 and 2 vs 3, then the final. These picks still update the model. |
 | **Now showing** | — | — | The winner of the final, with its poster. |
 | **Extra rounds** (optional) | 3–5 more | More certainty | **Play 5 more rounds** on the winner screen goes back to narrowing. A new final four starts after 3 picks if one film clearly leads, otherwise after 5. The previous finalists are allowed back in, since they were close calls. |
 
-A typical game is 10–15 taps. The **certainty bulbs** follow this: one lights per
+A typical game is 10–15 taps. The vibe label is mostly the film's first-listed
+TMDB genre (so *Pulp Fiction* is a Thriller, not a Comedy). The exceptions: any
+animated film is Animated, a romance-comedy without drama is a Rom-com, and an
+action or adventure film with sci-fi in it is Sci-fi (*Star Wars*, *Dune*). The **certainty bulbs** follow this: one lights per
 warm-up round, narrowing fills up to 8 as the leading film pulls ahead (or as the
 round limit approaches), the final four lights 9–11, and the winner lights all 12.
 
@@ -273,6 +280,17 @@ earned a clearly positive bonus.
   film the model now likes best.
 - **Play 5 more rounds** (next to it) runs the extra rounds described above.
 - The runners-up are the other finalists, topped up with the model's next favorites.
+- Under the winner's description, **Top rated based on your tags** names the film
+  your current weights score highest among the films in your years (excluding
+  ones you skipped or marked seen). The bracket picks the winner, so the two can
+  differ; when they don't, it says the winner is also the top rated.
+- **Where does a movie rank tonight?** (on the winner screen) searches the whole
+  movie list by title and shows where each match ranks by your current weights
+  (the same score as above, taste plus quality, popularity and people). The rank
+  is among the films in your year range, including ones that left the game. It
+  also says whether you picked or passed on the film, and which of its tags fit
+  or go against your taste. A film outside your years is ranked as if it were in
+  range, and marked "outside your years".
 
 ### The pool and filters
 

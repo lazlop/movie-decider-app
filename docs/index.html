@@ -59,6 +59,12 @@
     <p class="howto">Tap the ticket you'd rather watch. Seen one already? Vote anyway, it shows what you like. Tap <b>Info</b> to read about a movie, or <b>Next option</b> to swap out one you can't judge.</p>
   </section>
 
+  <section class="screen opening" id="screen-lineup" hidden>
+    <p class="leaning">Start with a vibe. <b>Which of these six would you rather watch tonight?</b></p>
+    <div class="lineup" id="lineup"></div>
+    <button class="btn-ghost" id="lineup-skip" type="button">Skip, go straight to pairs</button>
+  </section>
+
   <section class="screen duel" id="screen-duel" hidden>
     <p class="leaning" id="leaning"></p>
     <div class="arena">
@@ -80,6 +86,7 @@
       <div class="feature-text">
         <p class="win-meta" id="win-meta"></p>
         <div class="why" id="win-why"></div>
+        <p class="top-rated" id="win-top"></p>
       </div>
     </div>
     <div class="win-next">
@@ -96,6 +103,11 @@
     <div class="runners">
       <h2>Also in the running</h2>
       <ol id="runners"></ol>
+    </div>
+    <div class="lookup">
+      <h2><label for="lookup-q">Where does a movie rank tonight?</label></h2>
+      <input type="search" id="lookup-q" placeholder="Search a title" autocomplete="off" spellcheck="false">
+      <ol id="lookup-results" aria-live="polite"></ol>
     </div>
     <div class="win-actions">
       <button class="btn-primary" id="again" type="button">New duel</button>

@@ -16,6 +16,8 @@
  * few picks to learn correlations between people anyway).
  *
  * Pair selection moves from exploring to deciding:
+ *   lineup    one pick from six well-known films of different genres, spread
+ *             far apart in taste space (counted as the pick beating each other)
  *   warm-up   pairs of well-known films, drawn from the most informative ones
  *             (films opened with on recent visits are held back)
  *   narrowing double Thompson sampling: two posterior draws, each one's favourite
@@ -28,9 +30,11 @@
   const K = DATA.dims;
   const Q = K, POP = K + 1;        // quality and popularity weights follow the taste dims
   const D = K + 2;
-  const WARMUP_ROUNDS = 3;
+  const WARMUP_ROUNDS = 3;         // counting the opening lineup, if played
+  const LINEUP_SIZE = 6;
+  const LINEUP_SCALE = 1.5;        // softens the lineup's five comparisons, which all hinge on one tap
   const WARM_CHOICES = 20;         // each warm-up pair is one of this many most informative
-  const RECENT_MAX = 36;           // warm-up films remembered across visits (about six nights)
+  const RECENT_MAX = 60;           // lineup and warm-up films remembered across visits (about six nights)
   const RECENT_DAYS = 14;          // ...and forgotten after this long
   const MIN_ROUNDS = 7;
   const MAX_ROUNDS = 12;
@@ -117,6 +121,21 @@
     ["Action", "--t-orange"], ["Crime", "--t-slate"], ["Thriller", "--t-salmon"],
     ["Mystery", "--t-slate"], ["Adventure", "--t-orange"], ["Drama", "--t-lilac"],
   ];
+  // Opening-lineup vibe: mostly the film's primary (first-listed) TMDB genre, so
+  // Pulp Fiction is a Thriller, not a Comedy. The lineup shows one film per vibe.
+  const has = (m, ...gs) => gs.some((g) => m.genres.includes(g));
+  const PRIMARY_VIBE = {
+    Action: "Action", Adventure: "Adventure", Fantasy: "Adventure", Family: "Adventure",
+    "Science Fiction": "Sci-fi", Comedy: "Comedy", Horror: "Horror",
+    Thriller: "Thriller", Crime: "Thriller", Mystery: "Thriller", Romance: "Romance",
+  };
+  function vibeOf(m) {
+    if (has(m, "Animation")) return "Animated";
+    if (has(m, "Romance") && has(m, "Comedy") && !has(m, "Drama", "War")) return "Rom-com";
+    if (has(m, "Science Fiction") && ["Action", "Adventure"].includes(m.genres[0])) return "Sci-fi";   // Star Wars, Dune
+    return PRIMARY_VIBE[m.genres[0]] || "Drama";
+  }
+  for (const m of movies) m.vibe = vibeOf(m);
   const stockOf = (m) => `var(${(STOCK.find(([g]) => m.genres.includes(g)) || [0, "--t-sand"])[1]})`;
 
   // ---------- math ----------
@@ -170,7 +189,8 @@
       minRound: MIN_ROUNDS,
       maxRound: MAX_ROUNDS,
       overtime: false,
-      phase: "warm",
+      phase: "lineup",
+      lineup: null,
       out: new Set(),       // lost a duel, rejected, or skipped
       seen: new Set(),      // skipped or marked seen: never listed as a runner-up
       shows: {},
@@ -194,6 +214,7 @@
       seen: new Set(st.seen),
       shows: { ...st.shows },
       pair: st.pair && [...st.pair],
+      lineup: st.lineup && [...st.lineup],
       bracket: st.bracket && JSON.parse(JSON.stringify(st.bracket)),
       picks: [...st.picks],
     };
@@ -279,8 +300,8 @@
     } catch (e) { /* storage unavailable */ }
   }
 
-  function familiar(pool) {
-    const n = Math.max(40, Math.min(300, Math.round(pool.length * 0.3)));
+  function familiar(pool, share = 0.3, cap = 300) {
+    const n = Math.max(40, Math.min(cap, Math.round(pool.length * share)));
     // Hold back recent warm-up films, unless the filters leave too few without them.
     const fresh = pool.filter((m) => !st.recent.has(m.tmdb));
     return (fresh.length >= n ? fresh : pool).slice(0, n);   // pool is sorted by vote count
@@ -310,6 +331,28 @@
     scored.sort((p, q) => q[0] - p[0]);
     const [, a, b] = scored[(Math.random() * Math.min(WARM_CHOICES, scored.length)) | 0];
     return [a, b];
+  }
+
+  // Six well-known films with six different vibes, picked at random so rarer
+  // ones like Rom-com get their turn. Within those vibes, films are chosen
+  // greedily so each is as far as possible (under the prior) from those
+  // already in, with a little randomness. A wider slice than the warm-up's, so
+  // every vibe has candidates.
+  function lineupFilms(pool) {
+    const fam = familiar(pool, 0.4, 600);
+    const vibes = new Set([...new Set(fam.map((m) => m.vibe))].sort(() => Math.random() - 0.5).slice(0, LINEUP_SIZE));
+    const spread = (a, b) => { const d = a.x.map((v, i) => v - b.x[i]); return dot(d, matVec(st.S, d)); };
+    const first = fam.filter((m) => vibes.has(m.vibe));
+    const chosen = [first[(Math.random() * first.length) | 0]];
+    while (chosen.length < LINEUP_SIZE) {
+      const used = new Set(chosen.map((m) => m.vibe));
+      let cands = fam.filter((m) => vibes.has(m.vibe) && !used.has(m.vibe));
+      if (!cands.length) cands = fam.filter((m) => !chosen.includes(m));   // narrow years: vibes run out
+      if (!cands.length) break;
+      const scored = cands.map((m) => [Math.min(...chosen.map((c) => spread(m, c))), m]).sort((p, q) => q[0] - p[0]);
+      chosen.push(scored[(Math.random() * Math.min(3, scored.length)) | 0][1]);
+    }
+    return chosen.sort(() => Math.random() - 0.5);
   }
 
   function narrowPair(pool) {
@@ -358,6 +401,13 @@
     const pool = available();
     if (pool.length < 2) return finish(meanRanking(pool)[0] || movies[st.picks.at(-1)?.[0] ?? 0]);
 
+    if (st.phase === "lineup") {
+      const films = lineupFilms(pool);
+      rememberWarm(films);
+      st.lineup = films.map((m) => m.id);
+      films.forEach((m) => { st.shows[m.id] = 1; });
+      return renderLineup();
+    }
     if (st.phase === "warm" && st.round >= WARMUP_ROUNDS) st.phase = "narrow";
     if (st.phase === "narrow") {
       const lb = leaderboard(pool);
@@ -405,6 +455,30 @@
       if (st.phase === "final") return advanceBracket(w.id);
       nextPair();
     });
+  }
+
+  // The lineup pick beats each of the other five. They leave the game, like any loser.
+  function pickLineup(i) {
+    if (busy || !st.lineup) return;
+    history.push(snapshot());
+    const w = movies[st.lineup[i]], losers = st.lineup.filter((id) => id !== w.id).map((id) => movies[id]);
+    for (const l of losers) { observe(w, l, LINEUP_SCALE); st.out.add(l.id); }
+    st.picks.push([w.id, ...losers.map((l) => l.id)]);
+    st.round++;
+    st.lineup = null;
+    st.phase = "warm";
+    busy = true;
+    [...$("lineup").children].forEach((el, j) => el.classList.add(j === i ? "chosen" : "dropped"));
+    setTimeout(nextPair, reduceMotion() ? 0 : 480);
+  }
+
+  // Straight to the pairwise warm-up, which then runs its full length.
+  function skipLineup() {
+    if (busy || !st.lineup) return;
+    history.push(snapshot());
+    st.lineup = null;
+    st.phase = "warm";
+    nextPair();
   }
 
   function advanceBracket(winnerId) {
@@ -475,6 +549,7 @@
     if (busy || !history.length) return;
     st = history.pop();
     if (st.winner != null) return renderWin();
+    if (st.lineup) return renderLineup();
     render();
   }
 
@@ -574,6 +649,7 @@
 
   function phaseLabel() {
     if (st.winner != null) return "Now showing";
+    if (st.phase === "lineup") return "Opening pick";
     if (st.phase === "final") return ["Final four · Semi 1", "Final four · Semi 2", "The final"][st.bracket.stage];
     if (st.phase === "warm") return `Warm-up · Round ${st.round + 1}`;
     if (st.overtime) return `Extra rounds · ${st.round - st.roundStart + 1} of ${st.maxRound - st.roundStart}`;
@@ -607,6 +683,20 @@
     renderSlot(0, true);
     renderSlot(1, true);
     updateUndo();
+  }
+
+  function renderLineup() {
+    busy = false;
+    show("lineup");
+    $("phase").textContent = phaseLabel();
+    renderBulbs();
+    $("lineup").innerHTML = st.lineup.map((id, i) => {
+      const m = movies[id];
+      const poster = m.poster ? `<img src="${POSTER}${m.poster}" alt="" decoding="async" onerror="this.remove()">` : "";
+      return `<button type="button" class="pick" style="--stock:${stockOf(m)};--i:${i}" aria-label="${esc(`${m.title} (${m.year}), ${m.vibe}`)}">
+        ${poster}<span class="pick-text"><span class="vibe">${esc(m.vibe)}</span><span class="pick-title">${esc(m.title)}</span><span class="pick-year">${m.year}</span></span>
+      </button>`;
+    }).join("");
   }
 
   function animateOut(slot, then) {
@@ -656,6 +746,12 @@
       ? `Picked from ${st.picks.length} choices. It hits what you kept choosing: ${tagsText}.`
       : `Picked from ${st.picks.length} choices. Expect ${tagsText}.`) + (lead ? ` Starring ${esc(lead)}.` : "");
 
+    // The bracket picks the winner; this is the film the learned weights score highest.
+    const top = meanRanking(movies.filter((r) => inRange(r, st.filters) && !st.seen.has(r.id)))[0];
+    $("win-top").innerHTML = top.id === m.id
+      ? "It's also the top rated based on your tags."
+      : `Top rated based on your tags: <b>${esc(top.title)}</b> (${top.year}).`;
+
     const q = encodeURIComponent(m.title);
     $("win-links").innerHTML = [
       m.imdb && `<a href="https://www.imdb.com/title/${m.imdb}/" target="_blank" rel="noopener">IMDb</a>`,
@@ -663,6 +759,8 @@
       `<a href="https://www.justwatch.com/us/search?q=${q}" target="_blank" rel="noopener">Where to stream</a>`,
       `<a href="https://www.youtube.com/results?search_query=${q}+${m.year}+trailer" target="_blank" rel="noopener">Trailer</a>`,
     ].filter(Boolean).join("");
+    $("lookup-q").value = "";
+    $("lookup-results").innerHTML = "";
 
     const sorted = affinities().sort((a, b) => b.v - a.v);
     $("taste-more").innerHTML = distinct(sorted, 5).map((a) => `<span>${esc(a.tag)}</span>`).join("");
@@ -684,8 +782,55 @@
     }).join("");
   }
 
+  // ---------- winner screen: where would a given film rank tonight? ----------
+  const fold = (s) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  for (const m of movies) m.key = ` ${fold(m.title)} `;
+
+  function lookup(query) {
+    const q = fold(query);
+    if (q.length < 2) return [];
+    // Word-start matches first ("alien" finds Aliens before Paralien), then by vote count.
+    const hits = movies.filter((m) => m.key.includes(q))
+      .map((m) => [m.key.startsWith(` ${q}`) ? 0 : m.key.includes(` ${q}`) ? 1 : 2, m])
+      .sort((a, b) => a[0] - b[0] || b[1].votes - a[1].votes);
+    return hits.slice(0, 5).map(([, m]) => m);
+  }
+
+  function lookupStatus(m) {
+    if (m.id === st.winner) return "Tonight's pick";
+    const won = st.picks.find(([w]) => w === m.id);
+    if (won) return "You picked it";
+    const lost = st.picks.find((p) => p.indexOf(m.id) > 0);
+    if (lost) return `You chose ${movies[lost[0]].title} over it`;
+    if (st.seen.has(m.id)) return "You skipped it";
+    return "";
+  }
+
+  function renderLookup() {
+    const t = meanTaste();
+    const pool = movies.filter((m) => inRange(m, st.filters)).map((m) => utility(m, t));
+    const aff = new Map(affinities().map((a) => [a.t, a.v]));
+    const tagList = (m, sign) => m.tags.filter((g) => shownTag(g) && sign * (aff.get(g) || 0) > 0.05)
+      .sort((a, b) => sign * (aff.get(b) - aff.get(a))).slice(0, 2).map((g) => vocab[g]);
+    $("lookup-results").innerHTML = lookup($("lookup-q").value).map((m) => {
+      const u = utility(m, t), rank = 1 + pool.filter((v) => v > u).length;
+      const inYears = inRange(m, st.filters);
+      const pct = (100 * rank) / pool.length;
+      const where = pct <= 50 ? `top ${Math.max(1, Math.ceil(pct))}%` : `bottom ${Math.max(1, Math.ceil(100 - pct))}%`;
+      const fits = tagList(m, 1), against = tagList(m, -1);
+      const notes = [
+        inYears ? `${where} of ${pool.length.toLocaleString()}` : "outside your years",
+        lookupStatus(m),
+        fits.length && `fits: ${fits.join(", ")}`,
+        against.length && `against: ${against.join(", ")}`,
+      ].filter(Boolean).map(esc).join(" · ");
+      return `<li style="--stock:${stockOf(m)}"><span class="lr">#${rank.toLocaleString()}</span>
+        <span class="lt"><span class="rt">${esc(m.title)}</span> <span class="ry">${m.year}</span><span class="ln">${notes}</span></span></li>`;
+    }).join("") || ($("lookup-q").value.trim().length >= 2 ? `<li class="none">Not in tonight's movie list.</li>` : "");
+  }
+
   function show(name) {
-    for (const s of ["start", "duel", "win"]) $(`screen-${s}`).hidden = s !== name;
+    for (const s of ["start", "lineup", "duel", "win"]) $(`screen-${s}`).hidden = s !== name;
   }
 
   // ---------- start screen: year range ----------
@@ -779,8 +924,16 @@
   $("again").addEventListener("click", home);
   $("seen-winner").addEventListener("click", seenWinner);
   $("more-rounds").addEventListener("click", moreRounds);
+  $("lineup").addEventListener("click", (e) => {
+    const btn = e.target.closest(".pick");
+    if (btn) pickLineup([...$("lineup").children].indexOf(btn));
+  });
+  $("lineup-skip").addEventListener("click", skipLineup);
+  $("lookup-q").addEventListener("input", renderLookup);
   document.addEventListener("keydown", (e) => {
-    if ($("screen-duel").hidden || e.target.closest("input")) return;
+    if (e.target.closest("input")) return;
+    if (!$("screen-lineup").hidden && e.key >= "1" && e.key <= String(LINEUP_SIZE)) return pickLineup(+e.key - 1);
+    if ($("screen-duel").hidden) return;
     if (e.key === "ArrowUp" || e.key === "1") pick(0);
     else if (e.key === "ArrowDown" || e.key === "2") pick(1);
     else if (e.key === "u" || e.key === "Backspace") undo();
