@@ -61,6 +61,14 @@
     };
   });
   const vocab = DATA.vocab;
+  // Tags the model still uses for matching but that don't make good labels:
+  // explicit, judgemental, or artifacts of MovieLens itself.
+  const HIDDEN_TAGS = new Set([
+    "pornography", "sexualized violence", "male nudity", "sex", "sexual", "sexy",
+    "horrible", "idiotic", "lame", "shallow", "stupidity", "plot holes",
+    "movielens top pick", "very interesting", "funny as hell", "islam", "women", "stereotypes",
+  ]);
+  const shownTag = (t) => !HIDDEN_TAGS.has(vocab[t]);
   const affinityRows = DATA.affinity;
   const peopleNames = DATA.people;
 
@@ -145,6 +153,10 @@
       pMu: new Float64Array(P),
       pVar: new Float64Array(P).fill(PERSON_PRIOR_VAR),
       round: 0,
+      roundStart: 0,        // where the current stretch of narrowing began
+      minRound: MIN_ROUNDS,
+      maxRound: MAX_ROUNDS,
+      overtime: false,
       phase: "warm",
       out: new Set(),       // lost a duel, rejected, or skipped
       seen: new Set(),      // skipped or marked seen: never listed as a runner-up
@@ -289,15 +301,17 @@
   };
 
   function affinities() {
-    return affinityRows.map((row, t) => ({ tag: vocab[t], v: dot(row, st.mu.subarray(0, K)) }));
+    return affinityRows.map((row, t) => ({ t, tag: vocab[t], v: dot(row, st.mu.subarray(0, K)) }))
+      .filter((a) => !HIDDEN_TAGS.has(a.tag));
   }
-  // Keep one of each near-duplicate tag ("dystopia" / "dystopian future").
+  // Keep one of each near-duplicate tag ("biopic" / "biography"): tags that point
+  // the same way in taste space say the same thing.
+  const SAME_TAG = 0.9;
+  const tagDir = affinityRows.map((row) => { const n = Math.sqrt(dot(row, row)) || 1; return row.map((v) => v / n); });
   function distinct(list, n) {
-    const out = [], stems = new Set();
+    const out = [];
     for (const a of list) {
-      const stem = a.tag.replace(/[^a-z]/g, "").slice(0, 4);
-      if (stems.has(stem)) continue;
-      stems.add(stem);
+      if (out.some((b) => dot(tagDir[a.t], tagDir[b.t]) >= SAME_TAG)) continue;
       out.push(a);
       if (out.length === n) break;
     }
@@ -313,9 +327,9 @@
     if (st.phase === "narrow") {
       const lb = leaderboard(pool);
       const share = lb[0].share;
-      const progress = Math.max(st.round / MAX_ROUNDS, share / LEADER_SHARE);
+      const progress = Math.max((st.round - st.roundStart) / (st.maxRound - st.roundStart), share / LEADER_SHARE);
       st.certainty = Math.min(8, Math.round(progress * 8));
-      if ((st.round >= MIN_ROUNDS && share >= LEADER_SHARE) || st.round >= MAX_ROUNDS) {
+      if ((st.round >= st.minRound && share >= LEADER_SHARE) || st.round >= st.maxRound) {
         return startFinal(lb, pool);
       }
       st.pair = narrowPair(pool).map((m) => m.id);
@@ -422,7 +436,7 @@
   function undo() {
     if (busy || !history.length) return;
     st = history.pop();
-    show("duel");
+    if (st.winner != null) return renderWin();
     render();
   }
 
@@ -431,6 +445,24 @@
     st.certainty = BULBS;
     st.pair = null;
     renderWin();
+  }
+
+  // Back to narrowing for a few more picks, then a fresh final four. The last
+  // finalists were close calls, so they're allowed back in.
+  function moreRounds() {
+    history.push(snapshot());
+    for (const id of st.bracket ? st.bracket.seeds : []) {
+      if (!st.seen.has(id)) { st.out.delete(id); delete st.shows[id]; }
+    }
+    st.winner = null;
+    st.bracket = null;
+    st.phase = "narrow";
+    st.overtime = true;
+    st.roundStart = st.round;
+    st.minRound = st.round + 3;
+    st.maxRound = st.round + 5;
+    nextPair();
+    window.scrollTo(0, 0);
   }
 
   function seenWinner() {
@@ -454,7 +486,7 @@
   function ticketHTML(m, { interactive = false } = {}) {
     const len = m.title.length;
     const cls = len > 34 ? "xlong" : len > 18 ? "long" : "";
-    const tags = m.tags.slice(0, 3).map((t) => vocab[t]).join(" · ");
+    const tags = m.tags.filter(shownTag).slice(0, 3).map((t) => vocab[t]).join(" · ");
     const dir = names(m.directors.slice(0, 1))[0];
     const leads = names(m.cast.slice(0, 2)).join(", ");
     const creditsLine = [dir && `<span class="dir">Dir. ${esc(dir)}</span>`, leads && esc(leads)].filter(Boolean).join(" · ");
@@ -505,6 +537,7 @@
     if (st.winner != null) return "Now showing";
     if (st.phase === "final") return ["Final four · Semi 1", "Final four · Semi 2", "The final"][st.bracket.stage];
     if (st.phase === "warm") return `Warm-up · Round ${st.round + 1}`;
+    if (st.overtime) return `Extra rounds · ${st.round - st.roundStart + 1} of ${st.maxRound - st.roundStart}`;
     return `Narrowing · Round ${st.round + 1}`;
   }
 
@@ -563,13 +596,22 @@
     t.textContent = m.title;
     t.classList.toggle("long", m.title.length > 22);
     t.style.animation = "none"; void t.offsetWidth; t.style.animation = "";
+    const poster = $("win-poster");
+    $("win-feature").classList.toggle("no-poster", !m.poster);
+    if (m.poster) {
+      poster.onerror = () => $("win-feature").classList.add("no-poster");
+      poster.src = `https://image.tmdb.org/t/p/w342${m.poster}`;
+      poster.alt = `Poster for ${m.title}`;
+    } else {
+      poster.removeAttribute("src");
+    }
     const dir = names(m.directors.slice(0, 1))[0];
     $("win-meta").textContent = [m.year, genreText(m), fmtRuntime(m.runtime), dir && `Dir. ${dir}`, `★ ${m.score.toFixed(1)} on TMDB`]
       .filter(Boolean).join(" · ");
 
     const aff = new Map(affinities().map((a) => [a.tag, a.v]));
-    const fits = m.tags.map((t) => vocab[t]).filter((t) => aff.get(t) > 0).sort((a, b) => aff.get(b) - aff.get(a)).slice(0, 3);
-    const tagsText = (fits.length ? fits : m.tags.slice(0, 3).map((t) => vocab[t])).map((s) => `<b>${esc(s)}</b>`).join(", ");
+    const fits = m.tags.filter(shownTag).map((t) => vocab[t]).filter((t) => aff.get(t) > 0).sort((a, b) => aff.get(b) - aff.get(a)).slice(0, 3);
+    const tagsText = (fits.length ? fits : m.tags.filter(shownTag).slice(0, 3).map((t) => vocab[t])).map((s) => `<b>${esc(s)}</b>`).join(", ");
     const lead = names(m.cast.slice(0, 2)).join(" and ");
     $("win-why").innerHTML = (fits.length
       ? `Picked from ${st.picks.length} choices. It hits what you kept choosing: ${tagsText}.`
@@ -687,6 +729,7 @@
   $("neither").addEventListener("click", neither);
   $("again").addEventListener("click", home);
   $("seen-winner").addEventListener("click", seenWinner);
+  $("more-rounds").addEventListener("click", moreRounds);
   document.addEventListener("keydown", (e) => {
     if ($("screen-duel").hidden || e.target.closest("input")) return;
     if (e.key === "ArrowUp" || e.key === "1") pick(0);

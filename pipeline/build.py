@@ -20,6 +20,7 @@ CACHE = ROOT / "cache"
 MODEL = ROOT / "model"
 OUT = ROOT / "docs" / "movies.js"
 TOP_TAGS = 6
+SAME_TAG = 0.9   # tags this aligned in taste space are near-duplicates ("biopic" / "biography")
 
 
 def load_model():
@@ -118,14 +119,13 @@ def main():
         return person_index[i]
 
     tag_mean = T.mean(0)
+    A = affinity / np.linalg.norm(affinity, axis=1, keepdims=True)
     out = []
     for i, m in enumerate(films):
-        top, stems = [], set()
+        top = []
         for t in np.argsort(-(T[i] - tag_mean)):
-            stem = re.sub(r"[^a-z]", "", vocab[t])[:4]
-            if stem not in stems:
+            if all(A[t] @ A[u] < SAME_TAG for u in top):
                 top.append(int(t))
-                stems.add(stem)
             if len(top) == TOP_TAGS:
                 break
         out.append([

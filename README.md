@@ -34,19 +34,34 @@ Put `TMDB_API_KEY=...` in `.env` (git-ignored). Training also needs MovieLens 25
 unzipped into `raw/` (git-ignored):
 `curl -LO https://files.grouplens.org/datasets/movielens/ml-25m.zip`.
 
-**The pool.** The most-voted TMDB films for every release year (5 a year in the
-1920s–30s rising to 45 a year from 1990 on), plus what's playing in US theaters.
+**The pool.** The most-voted TMDB films for every release year, plus what's
+playing in US theaters. How many films make it in is set in `config.json`:
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `per_year` | 5 a year from 1920, 10 from 1940, 18 from 1960, 30 from 1980, 45 from 1990 | Films per release year, as `[from_year, count]` steps |
+| `scale` | 1.0 | Multiplies every step. 2.0 gives ~5,100 films (1.8 MB) instead of ~2,600 (0.9 MB), still well-known titles |
+| `min_votes` / `min_votes_recent` | 200 / 80 | TMDB votes a film needs (the lower bar applies to the last two years) |
+| `now_playing_min_votes` | 50 | Votes an in-theaters film needs |
+| `first_year` | 1920 | Earliest release year |
+
+Edit it (GitHub's web editor works) and the next build, weekly or run by hand,
+uses it. The game scores every film each round; at 5,000 films that's ~30 ms
+on a desktop, so pools up to several thousand films stay responsive on phones.
 
 **Taste profiles.** MovieLens's tag genome scores about 14,000 films on 1,128
 descriptive tags. That's great mood and theme data, but it stops around 2019. So:
 
 - Films MovieLens scored keep their real scores, reduced to a 24-dimension "taste
-  space" (PCA) plus 300 readable tags.
+  space" (PCA) plus 300 readable tags. PCA also merges redundant tags: "biopic",
+  "biography" and "based on a true story" rise and fall together across films, so
+  they collapse into one direction instead of being counted three times.
 - Every other film gets a predicted profile. A ridge regression, trained on the
   ~13,000 films in both datasets, maps TMDB data to the MovieLens scores. Its
   inputs are a sentence-transformer embedding (`all-mpnet-base-v2`) of the plot
   and of the keyword list, keyword and genre flags, decade, and the average
-  profile of the director's and leads' other films.
+  profile of the director's and leads' other films. (Tested: including the title
+  in the encoded text, or encoding it separately, makes no measurable difference.)
 - `model/meta.json` records the held-out accuracy of each feature set.
 
 `model/` is committed so the weekly build doesn't need MovieLens.
@@ -99,7 +114,8 @@ game; the winner can come back (each film appears at most 3 times).
 | **Warm-up** | 1–3 | Explore | From the best-known ~30% of the pool (40–300 films), it tries 400 random pairs and shows the one it learns the most from: two films where your pick is hard to predict *and* would move the uncertain weights. In practice that means very different films. |
 | **Narrowing** | 4 up to 12 | Explore and decide | **Double Thompson sampling.** It draws two plausible versions of "you" from its current uncertainty and shows each one's favorite film. While it's unsure, the two draws disagree and you see varied options; as it gets sure, they converge on the same corner of the map. If both draws pick the same film, it pairs that film with the most informative challenger. About 15% of the time it redraws the challenger anyway, for variety. |
 | **Final four** | 3 more picks | Decide | Starts once one film is the favorite in at least 30% of 200 imagined versions of you (from round 7 on), or at round 12 regardless. The four films that win most often are seeded 1–4 and play 1 vs 4 and 2 vs 3, then the final. These picks still update the model. |
-| **Now showing** | — | — | The winner of the final. |
+| **Now showing** | — | — | The winner of the final, with its poster. |
+| **Extra rounds** (optional) | 3–5 more | More certainty | **Play 5 more rounds** on the winner screen goes back to narrowing. A new final four starts after 3 picks if one film clearly leads, otherwise after 5. The previous finalists are allowed back in, since they were close calls. |
 
 A typical game is 10–15 taps. The **certainty bulbs** follow this: one lights per
 warm-up round, narrowing fills up to 8 as the leading film pulls ahead (or as the
@@ -107,7 +123,11 @@ round limit approaches), the final four lights 9–11, and the winner lights all
 
 The "Leaning toward…" line during play and the "More of / Less of" chips at the
 end come from comparing your current weights with how each tag lines up with the
-taste axes.
+taste axes. Near-duplicate tags ("biopic", "biography", "biographical") point the
+same way in the taste space, so labels skip any tag within cosine 0.9 of one
+already shown. A few tags are used for matching but never shown as labels because
+they're explicit or judgemental ("pornography", "lame"…); see `HIDDEN_TAGS` in
+`docs/app.js`.
 
 ### Directors and actors
 
@@ -130,8 +150,9 @@ earned a clearly positive bonus.
 - **Neither** counts as a mild vote against both films. The game treats it as an
   average film beating each one, at reduced strength, and removes both.
 - **Undo** restores the game exactly as it was before your last tap.
-- **Seen it? Show the next pick** (under the winner) rules the winner out and
-  shows the film the model now likes best.
+- **Seen it? Next pick** (under the winner) rules the winner out and shows the
+  film the model now likes best.
+- **Play 5 more rounds** (next to it) runs the extra rounds described above.
 - The runners-up are the other finalists, topped up with the model's next favorites.
 
 ### The pool and filters

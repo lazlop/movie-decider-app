@@ -107,36 +107,41 @@ def fetch_many(ids, max_age_days=None, workers=24):
     return out
 
 
-def per_year_quota(y):
-    if y < 1940: return 5
-    if y < 1960: return 10
-    if y < 1980: return 18
-    if y < 1990: return 30
-    return 45
+def pool_config():
+    return json.loads((ROOT / "config.json").read_text())["pool"]
+
+
+def per_year_quota(y, cfg):
+    quota = 0
+    for start, n in cfg["per_year"]:
+        if y >= start:
+            quota = n
+    return round(quota * cfg.get("scale", 1))
 
 
 def discover_pool():
     """Most-voted films for every release year, plus what's in theaters now."""
+    cfg = pool_config()
     this_year = date.today().year
     picks = {}
 
     def year_ids(y):
-        quota = per_year_quota(y)
+        quota = per_year_quota(y, cfg)
         recent = y >= this_year - 1
-        ids = []
-        for page in (1, 2, 3):
+        ids, page = [], 1
+        while len(ids) < quota:
             r = get("/discover/movie", primary_release_year=y, page=page,
                     sort_by="popularity.desc" if y == this_year else "vote_count.desc",
-                    **{"vote_count.gte": 80 if recent else 200,
+                    **{"vote_count.gte": cfg["min_votes_recent"] if recent else cfg["min_votes"],
                        "without_genres": TV_MOVIE, "include_adult": "false"})
-            for m in (r or {}).get("results", []):
-                ids.append(m["id"])
-            if len(ids) >= quota or not r or page >= r.get("total_pages", 0):
+            ids += [m["id"] for m in (r or {}).get("results", [])]
+            if not r or page >= min(r.get("total_pages", 0), 500):
                 break
+            page += 1
         return ids[:quota]
 
     with ThreadPoolExecutor(16) as ex:
-        for ids in ex.map(year_ids, range(1920, this_year + 1)):
+        for ids in ex.map(year_ids, range(cfg["first_year"], this_year + 1)):
             for i in ids:
                 picks[i] = False
 
@@ -144,7 +149,7 @@ def discover_pool():
     for page in (1, 2, 3):
         r = get("/movie/now_playing", region="US", page=page)
         for m in (r or {}).get("results", []):
-            if m.get("vote_count", 0) >= 50:
+            if m.get("vote_count", 0) >= cfg["now_playing_min_votes"]:
                 now_playing.add(m["id"])
                 picks[m["id"]] = True
     for i in now_playing:
