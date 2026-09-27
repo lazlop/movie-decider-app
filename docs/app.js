@@ -7,8 +7,9 @@
  *   P(A beats B) = Phi(theta . (xA - xB) + people bonus)
  * folded in with one moment-matching (assumed density filtering) step.
  *
- * Popularity (votes relative to films of the same era) is not learned: the
- * start screen sets a fixed boost for it, so players can ask for lesser-known films.
+ * Popularity (votes relative to films of the same era) is learned like quality,
+ * but kept separate from it; the start screen's Favor setting picks its starting
+ * weight, so players can ask for lesser-known films and picks can still move it.
  *
  * People bonus: directors and lead actors with 3+ films in the pool get their
  * own small weight (actors can be switched off on the start screen), kept as independent Gaussians (cheap on a phone, and too
@@ -25,7 +26,8 @@
 
   const DATA = window.MOVIE_DATA;
   const K = DATA.dims;
-  const D = K + 1;                 // taste dims + quality weight
+  const Q = K, POP = K + 1;        // quality and popularity weights follow the taste dims
+  const D = K + 2;
   const WARMUP_ROUNDS = 3;
   const WARM_CHOICES = 20;         // each warm-up pair is one of this many most informative
   const RECENT_MAX = 36;           // warm-up films remembered across visits (about six nights)
@@ -39,7 +41,8 @@
   const PERSON_MIN_FILMS = 3;
   const PERSON_PRIOR_VAR = 0.12;
   const PERSON_CAP = 0.9;
-  // Start-screen popularity setting: utility boost per SD of era-relative votes.
+  const POP_PRIOR_VAR = 0.1;       // how far picks can move the popularity weight from its start
+  // Start-screen popularity setting: starting weight per SD of era-relative votes.
   const POPULARITY = { popular: ["Popular", 0.3], balanced: ["Balanced", 0], obscure: ["Lesser-known", -0.3] };
   const POSTER = "https://image.tmdb.org/t/p/w185";
   const DAY = 864e5;
@@ -59,8 +62,7 @@
       tmdb: r[F.tmdb],
       votes: r[F.votes],
       score: r[F.score],
-      x: Float64Array.from([...r[F.vec], r[F.quality]]),
-      pop: r[F.popularity] ?? 0,
+      x: Float64Array.from([...r[F.vec], r[F.quality], r[F.popularity] ?? 0]),
       tags: r[F.tags],
       directors: r[F.directors],
       cast: r[F.cast],
@@ -151,15 +153,15 @@
 
   function freshState() {
     const mu = new Float64Array(D);
-    mu[K] = 0.5;                                   // people usually prefer well-rated films
+    mu[Q] = 0.5;                                   // people usually prefer well-rated films
+    mu[POP] = (POPULARITY[filters.popularity] || POPULARITY.balanced)[1];
     const S = Array.from({ length: D }, (_, i) => {
       const row = new Float64Array(D);
-      row[i] = i < K ? 1.5 / K : 0.06;
+      row[i] = i < K ? 1.5 / K : i === Q ? 0.06 : POP_PRIOR_VAR;
       return row;
     });
     return {
       filters: { ...filters },
-      popW: (POPULARITY[filters.popularity] || POPULARITY.balanced)[1],
       mu, S,
       pMu: new Float64Array(P),
       pVar: new Float64Array(P).fill(PERSON_PRIOR_VAR),
@@ -211,7 +213,7 @@
     const d = w.x.map((v, i) => (v - l.x[i]) / scale);
     const pd = personDiff(w, l, scale);
     const Sd = matVec(st.S, d);
-    let v = dot(d, Sd), m = dot(st.mu, d) + st.popW * (w.pop - l.pop) / scale;
+    let v = dot(d, Sd), m = dot(st.mu, d);
     for (const [p, dp] of pd) { v += st.pVar[p] * dp * dp; m += st.pMu[p] * dp; }
     const s = Math.sqrt(1 + v), z = m / s;
     const r = z < -8 ? -z : pdf(z) / cdf(z);
@@ -239,7 +241,7 @@
     return { theta, w };
   }
   const meanTaste = () => ({ theta: st.mu, w: st.pMu });
-  const utility = (m, t) => { let u = dot(t.theta, m.x) + st.popW * m.pop; for (const p of bpOf(m)) u += t.w[p]; return u; };
+  const utility = (m, t) => { let u = dot(t.theta, m.x); for (const p of bpOf(m)) u += t.w[p]; return u; };
 
   const argmax = (pool, taste, exclude = new Set()) => {
     let best = null, bv = -Infinity;
@@ -255,7 +257,7 @@
   // weighted by how uncertain the outcome is.
   function info(a, b) {
     const d = a.x.map((v, i) => v - b.x[i]);
-    let v = dot(d, matVec(st.S, d)), m = dot(st.mu, d) + st.popW * (a.pop - b.pop);
+    let v = dot(d, matVec(st.S, d)), m = dot(st.mu, d);
     for (const [p, dp] of personDiff(a, b, 1)) { v += st.pVar[p] * dp * dp; m += st.pMu[p] * dp; }
     const q = cdf(m / Math.sqrt(1 + v));
     return v * q * (1 - q);
@@ -421,9 +423,9 @@
     history.push(snapshot());
     const pool = available();
     // A soft "the typical movie beats both of these".
-    const avg = { x: new Float64Array(D), pop: 0, bp: [] };
+    const avg = { x: new Float64Array(D), bp: [] };
     for (const m of pool) m.x.forEach((v, i) => { avg.x[i] += v / pool.length; });
-    avg.x[K] = 0;
+    avg.x[Q] = avg.x[POP] = 0;
     for (const id of st.pair) { observe(avg, movies[id], 1.6); st.out.add(id); }
     st.round++;
     if (st.phase === "final") {
