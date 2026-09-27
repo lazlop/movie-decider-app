@@ -34,8 +34,8 @@ Put `TMDB_API_KEY=...` in `.env` (git-ignored). Training also needs MovieLens 25
 unzipped into `raw/` (git-ignored):
 `curl -LO https://files.grouplens.org/datasets/movielens/ml-25m.zip`.
 
-**The pool.** The most-voted TMDB films for every release year, plus what's
-playing in US theaters. Its size is set in `config.json`; see
+**The pool.** The most-voted TMDB feature films (60 minutes or longer) for every
+release year, plus what's playing in US theaters. Its size is set in `config.json`; see
 [Configuration](#configuration).
 
 **Taste profiles.** MovieLens's tag genome scores about 14,000 films on 1,128
@@ -89,6 +89,7 @@ the file in GitHub's web editor.
     "per_year": [[1920, 5], [1940, 10], [1960, 18], [1980, 30], [1990, 45]],
     "scale": 1.0,
     "min_votes": 200,
+    "min_runtime": 60,
     "min_votes_recent": 80,
     "now_playing_min_votes": 50
   }
@@ -100,6 +101,7 @@ the file in GitHub's web editor.
 | `per_year` | see above | How many films each release year contributes, as `[from_year, count]` steps. Each step holds until the next: `[1990, 45]` means 45 films a year from 1990 on. Within a year, films are ranked by TMDB vote count (the current year by popularity, since its films are still collecting votes). |
 | `scale` | `1.0` | Multiplies every `per_year` count, then rounds. The quickest way to grow or shrink the whole pool. |
 | `min_votes` | `200` | TMDB votes a film needs to be considered at all. Raise it for only well-known films; lower it for deeper cuts. A year with fewer qualifying films than its count just contributes fewer. |
+| `min_runtime` | `60` | Minutes a film must run. Keeps out shorts, music videos and TV specials (*Steamboat Willie*, *Thriller*, *How the Grinch Stole Christmas!*), and the next most-voted feature takes each one's place. Films with no runtime on TMDB yet (some brand-new releases) are kept. `0` turns it off. |
 | `min_votes_recent` | `80` | The same bar for the current and previous year, which haven't had time to collect votes. |
 | `now_playing_min_votes` | `50` | Votes a film on TMDB's US now-playing list needs to be added even if it missed its year's cut. |
 | `first_year` | `1920` | Earliest release year fetched. |

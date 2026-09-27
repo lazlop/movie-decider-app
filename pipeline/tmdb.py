@@ -133,6 +133,7 @@ def discover_pool():
             r = get("/discover/movie", primary_release_year=y, page=page,
                     sort_by="popularity.desc" if y == this_year else "vote_count.desc",
                     **{"vote_count.gte": cfg["min_votes_recent"] if recent else cfg["min_votes"],
+                       "with_runtime.gte": cfg.get("min_runtime", 0),
                        "without_genres": TV_MOVIE, "include_adult": "false"})
             ids += [m["id"] for m in (r or {}).get("results", [])]
             if not r or page >= min(r.get("total_pages", 0), 500):
@@ -173,7 +174,11 @@ def main():
         print(f"pool: {len(picks)} films, {sum(picks.values())} now playing")
         # Recent films change fast (votes, keywords); refresh them weekly.
         got = fetch_many(picks, max_age_days=6)
-        pool = [{"id": i, "nowPlaying": np_} for i, np_ in picks.items() if i in got]
+        # Now-playing films skip discover's runtime filter; unknown runtimes (0) stay.
+        short = {i for i in got if 0 < got[i]["runtime"] < pool_config().get("min_runtime", 0)}
+        pool = [{"id": i, "nowPlaying": np_} for i, np_ in picks.items() if i in got and i not in short]
+        if short:
+            print(f"dropped {len(short)} films under the minimum runtime")
         (ROOT / "cache" / "pool.json").write_text(json.dumps(
             {"built": date.today().isoformat(), "films": pool}))
         print(f"wrote cache/pool.json ({len(pool)} films)")
