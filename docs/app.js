@@ -7,6 +7,9 @@
  *   P(A beats B) = Phi(theta . (xA - xB) + people bonus)
  * folded in with one moment-matching (assumed density filtering) step.
  *
+ * Popularity (votes relative to films of the same era) is not learned: the
+ * start screen sets a fixed boost for it, so players can ask for lesser-known films.
+ *
  * People bonus: directors and lead actors with 3+ films in the pool get their
  * own small weight (actors can be switched off on the start screen), kept as independent Gaussians (cheap on a phone, and too
  * few picks to learn correlations between people anyway).
@@ -36,6 +39,8 @@
   const PERSON_MIN_FILMS = 3;
   const PERSON_PRIOR_VAR = 0.12;
   const PERSON_CAP = 0.9;
+  // Start-screen popularity setting: utility boost per SD of era-relative votes.
+  const POPULARITY = { popular: ["Popular", 0.3], balanced: ["Balanced", 0], obscure: ["Lesser-known", -0.3] };
   const POSTER = "https://image.tmdb.org/t/p/w185";
   const DAY = 864e5;
 
@@ -55,6 +60,7 @@
       votes: r[F.votes],
       score: r[F.score],
       x: Float64Array.from([...r[F.vec], r[F.quality]]),
+      pop: r[F.popularity] ?? 0,
       tags: r[F.tags],
       directors: r[F.directors],
       cast: r[F.cast],
@@ -141,18 +147,19 @@
   let st = null;
   let history = [];
   let busy = false;
-  const filters = { from: YEAR_MIN, to: YEAR_MAX, skipTheaters: false, actors: true };
+  const filters = { from: YEAR_MIN, to: YEAR_MAX, skipTheaters: false, actors: true, popularity: "balanced" };
 
   function freshState() {
     const mu = new Float64Array(D);
-    mu[K] = 0.8;                                   // people usually prefer well-loved films
+    mu[K] = 0.5;                                   // people usually prefer well-rated films
     const S = Array.from({ length: D }, (_, i) => {
       const row = new Float64Array(D);
-      row[i] = i < K ? 1.5 / K : 0.15;
+      row[i] = i < K ? 1.5 / K : 0.06;
       return row;
     });
     return {
       filters: { ...filters },
+      popW: (POPULARITY[filters.popularity] || POPULARITY.balanced)[1],
       mu, S,
       pMu: new Float64Array(P),
       pVar: new Float64Array(P).fill(PERSON_PRIOR_VAR),
@@ -204,7 +211,7 @@
     const d = w.x.map((v, i) => (v - l.x[i]) / scale);
     const pd = personDiff(w, l, scale);
     const Sd = matVec(st.S, d);
-    let v = dot(d, Sd), m = dot(st.mu, d);
+    let v = dot(d, Sd), m = dot(st.mu, d) + st.popW * (w.pop - l.pop) / scale;
     for (const [p, dp] of pd) { v += st.pVar[p] * dp * dp; m += st.pMu[p] * dp; }
     const s = Math.sqrt(1 + v), z = m / s;
     const r = z < -8 ? -z : pdf(z) / cdf(z);
@@ -232,7 +239,7 @@
     return { theta, w };
   }
   const meanTaste = () => ({ theta: st.mu, w: st.pMu });
-  const utility = (m, t) => { let u = dot(t.theta, m.x); for (const p of bpOf(m)) u += t.w[p]; return u; };
+  const utility = (m, t) => { let u = dot(t.theta, m.x) + st.popW * m.pop; for (const p of bpOf(m)) u += t.w[p]; return u; };
 
   const argmax = (pool, taste, exclude = new Set()) => {
     let best = null, bv = -Infinity;
@@ -248,7 +255,7 @@
   // weighted by how uncertain the outcome is.
   function info(a, b) {
     const d = a.x.map((v, i) => v - b.x[i]);
-    let v = dot(d, matVec(st.S, d)), m = dot(st.mu, d);
+    let v = dot(d, matVec(st.S, d)), m = dot(st.mu, d) + st.popW * (a.pop - b.pop);
     for (const [p, dp] of personDiff(a, b, 1)) { v += st.pVar[p] * dp * dp; m += st.pMu[p] * dp; }
     const q = cdf(m / Math.sqrt(1 + v));
     return v * q * (1 - q);
@@ -414,7 +421,7 @@
     history.push(snapshot());
     const pool = available();
     // A soft "the typical movie beats both of these".
-    const avg = { x: new Float64Array(D), bp: [] };
+    const avg = { x: new Float64Array(D), pop: 0, bp: [] };
     for (const m of pool) m.x.forEach((v, i) => { avg.x[i] += v / pool.length; });
     avg.x[K] = 0;
     for (const id of st.pair) { observe(avg, movies[id], 1.6); st.out.add(id); }
@@ -693,6 +700,7 @@
     fill.style.right = `${((YEAR_MAX - filters.to) / span) * 100}%`;
     theatersBox.checked = filters.skipTheaters;
     actors.checked = filters.actors;
+    for (const btn of $("popularity").children) btn.setAttribute("aria-pressed", String(btn.dataset.pop === filters.popularity));
     const n = movies.filter((m) => inRange(m, filters)).length;
     $("yr-count").textContent = `${n.toLocaleString()} movies`;
     $("start").disabled = n < MIN_POOL;
@@ -712,6 +720,7 @@
         to: Math.max(YEAR_MIN, Math.min(YEAR_MAX, +saved.to || YEAR_MAX)),
         skipTheaters: !!saved.skipTheaters,
         actors: saved.actors !== false,
+        popularity: saved.popularity in POPULARITY ? saved.popularity : "balanced",
       });
     } catch (e) { /* storage unavailable */ }
     $("presets").innerHTML = PRESETS.map(([label, from, to]) =>
@@ -730,6 +739,14 @@
     yrTo.addEventListener("pointerdown", () => { yrTo.style.zIndex = 2; yrFrom.style.zIndex = 1; });
     theatersBox.addEventListener("change", () => { filters.skipTheaters = theatersBox.checked; renderFilters(); });
     actors.addEventListener("change", () => { filters.actors = actors.checked; renderFilters(); });
+    $("popularity").innerHTML = Object.entries(POPULARITY).map(([key, [label]]) =>
+      `<button type="button" data-pop="${key}">${label}</button>`).join("");
+    $("popularity").addEventListener("click", (e) => {
+      const btn = e.target.closest("button");
+      if (!btn) return;
+      filters.popularity = btn.dataset.pop;
+      renderFilters();
+    });
     renderFilters();
   }
 

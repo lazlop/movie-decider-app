@@ -156,6 +156,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 }
 .presets button[aria-pressed="true"] { background: var(--bulb); color: var(--ink); border-color: var(--bulb); }
 
+.field-label { margin: 6px 0 0; font-size: 15px; }
 .toggle { display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 15px; }
 .toggle input { position: absolute; opacity: 0; width: 1px; height: 1px; }
 .switch {

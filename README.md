@@ -55,8 +55,12 @@ descriptive tags. That's great mood and theme data, but it stops around 2019. So
 
 `model/` is committed so the weekly build doesn't need MovieLens.
 
-**Quality prior.** A shrunk TMDB rating, plus the vote count compared with films
-from the same few years (new releases haven't had time to collect votes).
+**Quality and popularity.** Quality is the TMDB rating shrunk toward the mean
+(so a 9.0 from 40 votes doesn't beat an 8.5 from 20,000). Popularity is the vote
+count compared with films from the same few years (new releases haven't had time
+to collect votes). The game learns how much you care about quality; popularity is
+a fixed boost the player picks on the start screen (**Favor: Popular / Balanced /
+Lesser-known**).
 
 ## Configuration
 
@@ -122,6 +126,7 @@ Change these, commit, and GitHub Pages serves the new behavior. No rebuild neede
 | Constant | Default | What it does |
 |---|---|---|
 | `WARMUP_ROUNDS` | `3` | Rounds of pure exploration before narrowing. |
+| `POPULARITY` | `+0.3` / `0` / `−0.3` | The start screen's **Favor** options: the utility boost per standard deviation of popularity. Balanced is the default; Popular matches how the game behaved before the option existed. |
 | `WARM_CHOICES` | `20` | Each warm-up pair is picked at random from this many of the most informative candidates. `1` always shows the single best pair (the same few films every game); higher means more variety and slightly less informative openers. |
 | `RECENT_MAX` / `RECENT_DAYS` | `36` / `14` | Warm-up films remembered in the browser (localStorage) and held out of the next games' warm-ups: at most this many films, each for at most this many days. |
 | `MIN_ROUNDS` / `MAX_ROUNDS` | `7` / `12` | Earliest round the final four can start, and the round it starts regardless. Lower both for shorter games. |
@@ -141,7 +146,7 @@ Change these, commit, and GitHub Pages serves the new behavior. No rebuild neede
 |---|---|---|---|
 | `TOP_TAGS` | `build.py` | `6` | Rebuild. Tags stored per film (tickets show 3). |
 | `SAME_TAG` | `build.py` | `0.9` | Rebuild. Duplicate threshold for those stored tags. |
-| Quality prior | `build.py` | rating shrunk toward the mean by 300 votes; blend 0.6 rating / 0.4 era-relative votes | Rebuild. |
+| Quality / popularity | `build.py` | quality: rating shrunk toward the mean by 300 votes; popularity: log votes minus the median of films within 2 years. Both z-scored. | Rebuild. |
 | `N_CAST` | `features.py` | `3` | Retrain. Lead actors per film used for matching and prediction. |
 | `ENCODER` | `features.py` | `all-mpnet-base-v2` | Retrain. The sentence-transformer used for plots and keywords. |
 | `DIMS` | `train.py` | `24` | Retrain. Size of the taste space. |
@@ -179,18 +184,20 @@ Each movie has 25 numbers:
   while *Notting Hill* is farther from it than most films are.
   The axes don't have names, but each lines up with readable tags ("dark",
   "space", "feel-good"…), which is how the game can describe your taste in words.
-- **1 quality score.** From the TMDB rating and vote count (see *Quality prior*).
+- **1 quality score.** From the TMDB rating (see *Quality and popularity*).
+  Each film also carries a popularity score, which isn't learned (below).
 
 ### What the game learns about you
 
 Your taste is a set of 25 weights, one per number above. A movie's appeal to you
 is its numbers multiplied by your weights and added up, plus a small bonus for
-directors and actors you've shown you like.
+directors and actors you've shown you like, plus the popularity boost from the
+start screen (+0.3, 0 or −0.3 per standard deviation of popularity).
 
 The game never knows your weights exactly. It keeps a best guess **and** how unsure
 it is about each one (a Gaussian distribution). It starts out knowing nothing
-about your taste, except for a mild assumption that you prefer well-loved films
-(quality weight starts at 0.8).
+about your taste, except for a mild assumption that you prefer well-rated films
+(quality weight starts at 0.5).
 
 ### What one tap does
 

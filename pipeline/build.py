@@ -95,15 +95,17 @@ def main():
         Zp = Zp.mean(0) + (Zp - Zp.mean(0)) * stretch
         Z[todo], T[todo] = Zp, Tp
 
-    # Quality prior: shrunk TMDB score plus votes relative to films of the same era
-    # (recent films have had less time to collect votes).
+    # Quality: TMDB score shrunk toward the mean. Popularity: votes relative to films
+    # of the same era (recent films have had less time to collect votes). The game
+    # learns a weight on quality; popularity is a boost the player sets.
     votes = np.array([m["votes"] for m in films], dtype=np.float64)
     score = np.array([m["score"] for m in films])
     bayes = (votes * score + 300 * score.mean()) / (votes + 300)
     years = np.array([F.year_of(m) for m in films])
     lv = np.log(votes + 1)
     rel = np.array([lv[i] - np.median(lv[np.abs(years - years[i]) <= 2]) for i in range(len(films))])
-    quality = 0.6 * zscore(bayes) + 0.4 * zscore(rel)
+    quality = zscore(bayes)
+    popularity = zscore(rel)
 
     # How each display tag moves with each taste dimension (for "you're leaning toward…").
     Tz = (T - T.mean(0)) / (T.std(0) + 1e-9)
@@ -145,6 +147,7 @@ def main():
             0 if real[i] else 1,
             1 if m["id"] in now_playing else 0,
             int(m["runtime"]),
+            round(float(popularity[i]), 2),
         ])
 
     data = {
@@ -155,7 +158,8 @@ def main():
         "affinity": [[round(float(v), 3) for v in row] for row in affinity],
         "people": people,
         "fields": ["title", "release", "genres", "imdb", "tmdb", "votes", "score", "quality",
-                   "vec", "tags", "directors", "cast", "poster", "predicted", "nowPlaying", "runtime"],
+                   "vec", "tags", "directors", "cast", "poster", "predicted", "nowPlaying", "runtime",
+                   "popularity"],
         "movies": out,
     }
     OUT.write_text("window.MOVIE_DATA=" + json.dumps(data, separators=(",", ":"), ensure_ascii=False) + ";\n")
