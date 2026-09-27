@@ -1,7 +1,7 @@
 # Reel Duel
 
 A phone-first "this or that" game that finds the movie you want to watch tonight.
-You pick between two movies at a time. After about a dozen picks it names one film.
+You pick between two movies at a time. After about ten picks it names one film.
 
 Static site, no backend: everything the browser needs lives in `docs/`, so it can be
 hosted on GitHub Pages. A weekly GitHub Action refreshes the movie list from TMDB.
@@ -168,8 +168,8 @@ Change these, commit, and GitHub Pages serves the new behavior. No rebuild neede
 | `POP_PRIOR_VAR` | `0` | How far picks can move the popularity weight from the Favor value. `0` fixes it: players pick on vibe, which favors familiar films and would mislead it. |
 | `WARM_CHOICES` | `20` | Each warm-up pair is picked at random from this many of the most informative candidates. `1` always shows the single best pair (the same few films every game); higher means more variety and slightly less informative openers. |
 | `RECENT_MAX` / `RECENT_DAYS` | `60` / `14` | Lineup and warm-up films remembered in the browser (localStorage) and held out of the next games' lineups and warm-ups: at most this many films, each for at most this many days. |
-| `MIN_ROUNDS` / `MAX_ROUNDS` | `5` / `10` | Earliest round the final four can start, and the round it starts regardless. Lower both for shorter games. |
-| `LEADER_SHARE` | `0.15` | How often one film must come out on top across 200 imagined versions of you to end narrowing early. Higher means longer, surer games. In [Evaluation](#evaluation), `0.3` with rounds `7` / `12` almost never ended early (about 15 taps a game) and picked no better winners than today's settings (about 11). |
+| `MIN_ROUNDS` / `MAX_ROUNDS` | `4` / `9` | Earliest round the final four can start, and the round it starts regardless. Lower both for shorter games. |
+| `LEADER_SHARE` | `0.15` | How often one film must come out on top across 200 imagined versions of you to end narrowing early. Higher means longer, surer games. In [Evaluation](#evaluation), `0.3` with rounds `7` / `12` almost never ended early (about 15 taps a game) and picked no better winners than today's settings (about 10). Shorter than about 9 taps, the finalists lose much of their personal fit. |
 | `MAX_SHOWS` | `3` | How many times one film can appear in a game. |
 | `MIN_POOL` | `20` | Fewest films in the chosen year range that still allows starting. |
 | `PERSON_MIN_FILMS` | `3` | Films a director needs in the pool to get a learned bonus. |
@@ -259,12 +259,12 @@ game; the winner can come back (each film appears at most 3 times).
 |---|---|---|---|
 | **Opening lineup** | 1 | Explore | Six well-known films (from the best-known ~40% of the pool), each with a different vibe: six of Animated, Rom-com, Sci-fi, Action, Comedy, Horror, Thriller, Romance, Adventure and Drama, chosen at random. Within those vibes, films are added one at a time, each as far as possible in taste space from the ones already chosen (one of the 3 farthest, for variety). Your pick counts as beating each of the other five, at reduced strength, and the five leave the game. **Skip** goes straight to the pairs, and then the warm-up runs all 3 rounds. |
 | **Warm-up** | 2–3 | Explore | From the best-known ~30% of the pool (40–300 films), it tries 400 random pairs and shows one of the 20 it would learn the most from (films from recent warm-ups on this device are held back): two films where your pick is hard to predict *and* would move the uncertain weights. In practice that means very different films. |
-| **Narrowing** | 4 up to 10 | Explore and decide | **Double Thompson sampling.** It draws two plausible versions of "you" from its current uncertainty and shows each one's favorite film. While it's unsure, the two draws disagree and you see varied options; as it gets sure, they converge on the same corner of the map. If both draws pick the same film, it pairs that film with the most informative challenger. About 15% of the time it redraws the challenger anyway, for variety. |
-| **Final four** | 3 more picks | Decide | Starts once one film is the favorite in at least 15% of 200 imagined versions of you (from round 5 on), or at round 10 regardless. The four films that win most often are seeded 1–4 and play 1 vs 4 and 2 vs 3, then the final. These picks still update the model. |
+| **Narrowing** | 4 up to 9 | Explore and decide | **Double Thompson sampling.** It draws two plausible versions of "you" from its current uncertainty and shows each one's favorite film. While it's unsure, the two draws disagree and you see varied options; as it gets sure, they converge on the same corner of the map. If both draws pick the same film, it pairs that film with the most informative challenger. About 15% of the time it redraws the challenger anyway, for variety. |
+| **Final four** | 3 more picks | Decide | Starts once one film is the favorite in at least 15% of 200 imagined versions of you (from round 4 on), or at round 9 regardless. The four films that win most often are seeded 1–4 and play 1 vs 4 and 2 vs 3, then the final. These picks still update the model. |
 | **Now showing** | — | — | The winner of the final, with its poster. |
 | **Extra rounds** (optional) | 3–5 more | More certainty | **Play 5 more rounds** on the winner screen goes back to narrowing. A new final four starts after 3 picks if one film clearly leads, otherwise after 5. The previous finalists are allowed back in, since they were close calls. |
 
-A typical game is 8–13 taps, usually about 11. The vibe label is mostly the film's first-listed
+A typical game is 7–12 taps, usually about 10. The vibe label is mostly the film's first-listed
 TMDB genre (so *Pulp Fiction* is a Thriller, not a Comedy). The exceptions: any
 animated film is Animated, a romance-comedy without drama is a Rom-com, and an
 action or adventure film with sci-fi in it is Sci-fi (*Star Wars*, *Dune*). The **certainty bulbs** follow this: one lights per
@@ -347,7 +347,7 @@ keys and output columns. Results, September 2026 (600 users, 3 games each):
 
 | | Winner's percentile among the user's ratings | Finalists vs. all users' ratings | Taps |
 |---|---|---|---|
-| As shipped | 88.6% | +0.24 stars | 11 |
+| As shipped | 88.5% | +0.22 stars | 10 |
 | Previous settings (7/12 rounds, 0.3 leader share, TMDB quality, per-axis stretch) | 88.7% | +0.26 stars | 15 |
 | Everyone gets the pool's top-rated film | 77.8% | — | — |
 

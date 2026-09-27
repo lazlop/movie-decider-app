@@ -27,7 +27,7 @@ Variant keys (JSON object per variant; anything omitted is as shipped):
   "pop_mu": -0.8      starting popularity weight, as set by the start screen's Favor
                       buttons (Balanced, 0, is the default)
   "people": false     no director/actor bonuses
-  "actors": false     director bonuses only (the start screen's Match on actors switch)
+  "actors": true      bonuses for lead actors too (the app counts directors only)
   "noise": 1.0        rating noise per judgement (default 0.5 stars)
   "quality": "tmdb"   TMDB rating shrunk by 300 votes instead of movies.js's quality
   "pred": "stretch"   how swapped-in predictions are spread: "match" (build.py, default),
@@ -76,7 +76,10 @@ _people = [list(dict.fromkeys(r[F["directors"]] + r[F["cast"]])) for r in M]
 _credits = Counter(p for ps in _people for p in ps)
 _bidx = {p: i for i, p in enumerate(p for p, n in _credits.items() if n >= APP["PERSON_MIN_FILMS"])}
 BP = [[_bidx[p] for p in ps if p in _bidx] for ps in _people]
-BP_DIR = [[_bidx[p] for p in dict.fromkeys(r[F["directors"]]) if p in _bidx] for r in M]
+# As in app.js: directors only, counting only the films they directed.
+_dir_credits = Counter(p for r in M for p in dict.fromkeys(r[F["directors"]]))
+BP_DIR = [[_bidx[p] for p in dict.fromkeys(r[F["directors"]]) if _dir_credits[p] >= APP["PERSON_MIN_FILMS"]]
+          for r in M]
 NP = len(_bidx)
 
 # Lineup vibes, as in app.js vibeOf(): mostly the film's first-listed genre.
@@ -156,7 +159,7 @@ class Game:
         X = taste(self.c.get("pred", "match"), self.c.get("pred_scale", 1.0))[idx].copy()
         X[:, Q] = QUALITY[self.c.get("quality", "build")][idx]
         self.X = X
-        self.bp = [(BP if self.c.get("actors", True) else BP_DIR)[i] for i in idx]
+        self.bp = [(BP if self.c.get("actors", False) else BP_DIR)[i] for i in idx]
         self.people = self.c.get("people", True)
         self.mu = np.zeros(D)
         self.mu[Q] = self.c.get("q_mu", 0.5)
