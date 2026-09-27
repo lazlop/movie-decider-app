@@ -15,6 +15,8 @@ Output columns:
                cleanest measure of personalisation (the winner's own number is inflated,
                since the user picks it from the four).
   top-rated film pct   baseline: everyone gets the pool's highest-quality film
+  winner popularity    the winner's popularity (SDs, from movies.js), and where it falls
+               among the popularity of the player's own pool films
   predicted winners    share of winners whose profile was swapped for a predicted one,
                next to their share of the pool (they should roughly match)
 
@@ -22,6 +24,8 @@ Variant keys (JSON object per variant; anything omitted is as shipped):
   any constant from app.js read below, e.g. MAX_ROUNDS, LEADER_SHARE, LINEUP_SCALE
   "lineup": false     skip the opening lineup
   "q_mu", "q_var"     quality weight prior (0.5, 0.06 in app.js)
+  "pop_mu": -0.8      starting popularity weight, as set by the start screen's Favor
+                      buttons (Balanced, 0, is the default)
   "people": false     no director/actor bonuses
   "noise": 1.0        rating noise per judgement (default 0.5 stars)
   "quality": "tmdb"   TMDB rating shrunk by 300 votes instead of movies.js's quality
@@ -154,6 +158,7 @@ class Game:
         self.people = self.c.get("people", True)
         self.mu = np.zeros(D)
         self.mu[Q] = self.c.get("q_mu", 0.5)
+        self.mu[POP] = self.c.get("pop_mu", 0.0)
         self.S = np.diag([1.5 / K] * K + [self.c.get("q_var", 0.06), self.c["POP_PRIOR_VAR"]])
         self.pMu = np.zeros(NP)
         self.pVar = np.full(NP, self.c["PERSON_PRIOR_VAR"])
@@ -316,6 +321,7 @@ def play_one(job):
     return dict(pct=percentile(rl, rl[win]), rating=rl[win], user_mean=rl.mean(),
                 vs_crowd=np.nanmean([rl[s] - CROWD[idx[s]] for s in seeds]),
                 top_q_pct=percentile(rl, top_q), taps=game.round,
+                win_pop=X0[idx[win], POP], win_pop_pct=percentile(X0[idx, POP], X0[idx[win], POP]),
                 swapped_win=SWAP[idx[win]], swapped_share=SWAP[idx].mean())
 
 
@@ -332,6 +338,7 @@ def main():
             print(f"{name:24} winner pct {r.pct.mean():.3f}±{se:.3f} | rating {r.rating.mean():.2f} "
                   f"(user avg {r.user_mean.mean():.2f}) | finalists vs crowd {r.vs_crowd.mean():+.2f} "
                   f"| top-rated film pct {r.top_q_pct.mean():.3f} | taps {r.taps.mean():.1f} "
+                  f"| winner popularity {r.win_pop.mean():+.2f} ({r.win_pop_pct.mean():.0%} of pool) "
                   f"| predicted winners {r.swapped_win.mean():.2f} (pool {r.swapped_share.mean():.2f})",
                   flush=True)
 

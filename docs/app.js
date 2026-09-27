@@ -7,9 +7,9 @@
  *   P(A beats B) = Phi(theta . (xA - xB) + people bonus)
  * folded in with one moment-matching (assumed density filtering) step.
  *
- * Popularity (votes relative to films of the same era) is learned like quality,
- * but kept separate from it; the start screen's Favor setting picks its starting
- * weight, so players can ask for lesser-known films and picks can still move it.
+ * Popularity (votes relative to films of the same era) has its own weight, set by
+ * the start screen's Favor setting and fixed for the game: players pick on vibe,
+ * which favors films they know, so picks would mislead it.
  *
  * People bonus: directors and lead actors with 3+ films in the pool get their
  * own small weight (actors can be switched off on the start screen), kept as independent Gaussians (cheap on a phone, and too
@@ -45,9 +45,11 @@
   const PERSON_MIN_FILMS = 3;
   const PERSON_PRIOR_VAR = 0.12;
   const PERSON_CAP = 0.9;
-  const POP_PRIOR_VAR = 0.1;       // how far picks can move the popularity weight from its start
-  // Start-screen popularity setting: starting weight per SD of era-relative votes.
-  const POPULARITY = { popular: ["Popular", 0.3], balanced: ["Balanced", 0], obscure: ["Lesser-known", -0.3] };
+  const POP_PRIOR_VAR = 0;         // how far picks can move the popularity weight (0: Favor sets it)
+  // Start-screen Favor setting: popularity weight per SD of era-relative votes. Keys
+  // are what's saved on the device. eval/sim.py: Hidden gem's winners sit at about
+  // the 40th percentile of popularity (the old -0.3 left them at the 76th).
+  const POPULARITY = { obscure: ["Hidden gem", -0.8], balanced: ["Balanced", 0], popular: ["Blockbuster", 0.3] };
   const POSTER = "https://image.tmdb.org/t/p/w185";
   const DAY = 864e5;
 
