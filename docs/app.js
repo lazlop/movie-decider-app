@@ -36,9 +36,9 @@
   const WARM_CHOICES = 20;         // each warm-up pair is one of this many most informative
   const RECENT_MAX = 60;           // lineup and warm-up films remembered across visits (about six nights)
   const RECENT_DAYS = 14;          // ...and forgotten after this long
-  const MIN_ROUNDS = 7;
-  const MAX_ROUNDS = 12;
-  const LEADER_SHARE = 0.3;        // Thompson share that triggers the final four
+  const MIN_ROUNDS = 5;
+  const MAX_ROUNDS = 10;
+  const LEADER_SHARE = 0.15;       // Thompson share that triggers the final four (eval/: 0.3 almost never fired)
   const MAX_SHOWS = 3;             // a movie can return at most this often
   const BULBS = 12;
   const MIN_POOL = 20;

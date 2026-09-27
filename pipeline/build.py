@@ -14,6 +14,7 @@ from pathlib import Path
 import numpy as np
 
 import features as F
+import imdb as I
 
 ROOT = Path(__file__).resolve().parent.parent
 CACHE = ROOT / "cache"
@@ -24,6 +25,11 @@ SAME_TAG = 0.9   # tags this aligned in taste space are near-duplicates ("biopic
 NEW_DAYS = 365   # films younger than this get popularity relative to films of a similar age
 NEW_PEERS = 15   # how many films closest in age they're compared with
 POP_FLOOR = -2.5 # lowest popularity (SDs); a few limited releases sit far below the rest
+IMDB_K = 15000   # quality: IMDb votes' worth of "average film" every rating is blended with
+TMDB_K = 300     # ...the same for TMDB ratings, used when IMDb has none
+YOUNG_SHRINK = 2 # new releases get up to 1 + this times as much blending (early votes run high)
+YOUNG_DAYS = 365 # ...fading to the normal amount at this age
+THIN_GENOME_FROM = 2018  # MovieLens profiles from this release year on are washed out; rescale them
 
 
 def load_model():
@@ -53,6 +59,19 @@ def predict(films, meta, p, profiles):
     ])
     Y = ((X - p["mx"]) / p["sx"]) @ p["W"].astype(np.float64) + p["my"]
     return Y[:, :dims], np.clip(Y[:, dims:], 0, 1)
+
+
+def match_lengths(Zp, Zreal):
+    """Ridge predictions are shrunk toward the middle, so predicted films would never
+    be anyone's top pick. Give each one the distance from the centre that real films
+    have at the same rank (the film at the 90th percentile of predicted distances gets
+    the 90th percentile of real ones), keeping its direction. Stretching each axis
+    instead also magnified prediction noise, pushing a few predicted films far beyond
+    any real one, where they won a share of games out of all proportion (eval/sim.py).
+    """
+    norm = np.linalg.norm(Zp, axis=1)
+    rank = (np.argsort(np.argsort(norm)) + 0.5) / len(norm)
+    return Zp * (np.quantile(np.linalg.norm(Zreal, axis=1), rank) / (norm + 1e-9))[:, None]
 
 
 def zscore(a):
@@ -89,25 +108,42 @@ def main():
             Z[i], T[i] = genome[m["id"]]
     todo = [i for i, r in enumerate(real) if not r]
     print(f"{len(films) - len(todo)} with MovieLens profiles, predicting {len(todo)}")
+    years = np.array([F.year_of(m) for m in films])
+    # MovieLens data ends in November 2019, so films from its last couple of years had
+    # little tagging and their genome profiles sit washed out near the middle (mean
+    # length ~3.4 against 5.5-6 for every earlier era). Keep their direction, restore
+    # their length as for predicted films, measured against the well-tagged films.
+    full = [i for i, r in enumerate(real) if r and years[i] < THIN_GENOME_FROM]
+    thin = [i for i, r in enumerate(real) if r and years[i] >= THIN_GENOME_FROM]
+    if thin:
+        Z[thin] = match_lengths(Z[thin], Z[full])
     if todo:
         Zp, Tp = predict([films[i] for i in todo], meta, p, profiles)
-        # Ridge predictions are shrunk toward the middle; restore the spread of
-        # real profiles so predicted films can still be anyone's top pick.
-        real_idx = [i for i, r in enumerate(real) if r]
-        stretch = np.clip(Z[real_idx].std(0) / (Zp.std(0) + 1e-9), 1, 1.8)
-        Zp = Zp.mean(0) + (Zp - Zp.mean(0)) * stretch
-        Z[todo], T[todo] = Zp, Tp
+        Z[todo] = match_lengths(Zp, Z[full])
+        T[todo] = Tp
 
-    # Quality: TMDB score shrunk toward the mean. Popularity: votes relative to films
+    # Quality: IMDb rating (TMDB's for the rare film IMDb hasn't rated) shrunk toward
+    # the mean, harder for young films. Popularity: TMDB votes relative to films
     # of the same era (recent films have had less time to collect votes). Films
     # under a year old are still collecting votes fast, so they're compared with the
     # films closest to them in age instead. The game learns a weight on each.
     votes = np.array([m["votes"] for m in films], dtype=np.float64)
     score = np.array([m["score"] for m in films])
-    bayes = (votes * score + 300 * score.mean()) / (votes + 300)
-    years = np.array([F.year_of(m) for m in films])
     age = np.array([(today - date.fromisoformat(m["release"])).days for m in films])
     lv = np.log(votes + 1)
+
+    def shrunk(s, v, k):
+        k = k * (1 + YOUNG_SHRINK * np.clip(1 - age / YOUNG_DAYS, 0, 1))
+        return (v * s + k * s.mean()) / (v + k)
+    imdb = I.ratings()
+    iv = np.array([imdb.get(m["imdb"], (0, 0))[1] for m in films], dtype=np.float64)
+    ir = np.array([imdb.get(m["imdb"], (0, 0))[0] for m in films])
+    on_imdb = iv > 0
+    print(f"{on_imdb.sum()} with IMDb ratings, {(~on_imdb).sum()} using TMDB's")
+    # Each source is z-scored over its own films, so the fallback lands on the same scale.
+    bayes = zscore(shrunk(score, votes, TMDB_K))
+    if on_imdb.any():
+        bayes[on_imdb] = zscore(shrunk(ir, iv, IMDB_K)[on_imdb])
 
     def peers(i):
         if age[i] < NEW_DAYS:

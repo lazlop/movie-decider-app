@@ -26,7 +26,7 @@ http://localhost:8000.
 pipeline/tmdb.py training   # one-time: TMDB data for every MovieLens-scored film
 pipeline/train.py           # one-time: learn MovieLens tag scores from TMDB data -> model/
 pipeline/tmdb.py pool       # weekly: current game pool from TMDB
-pipeline/build.py           # weekly: model + pool -> docs/movies.js
+pipeline/build.py           # weekly: model + pool + IMDb ratings -> docs/movies.js
 ```
 
 Setup: `python3 -m venv .venv && .venv/bin/pip install torch --index-url https://download.pytorch.org/whl/cpu && .venv/bin/pip install -r requirements.txt`.
@@ -52,11 +52,29 @@ descriptive tags. That's great mood and theme data, but it stops around 2019. So
   profile of the director's and leads' other films. (Tested: including the title
   in the encoded text, or encoding it separately, makes no measurable difference.)
 - `model/meta.json` records the held-out accuracy of each feature set.
+- Ridge predictions huddle near the middle of the taste space, so predicted films
+  would never be anyone's favorite. Each one keeps its direction but is moved out
+  to the distance from the centre that real films have at the same rank: the
+  predicted film at the 90th percentile of predicted distances gets the 90th
+  percentile of real distances. (Stretching each axis instead also magnified
+  prediction noise and sent a few predicted films past every real one, where they
+  won a share of games out of all proportion; see [Evaluation](#evaluation).)
+- MovieLens data ends in November 2019, so films from 2018 and 2019 had little
+  tagging and their real profiles sit washed out near the middle (about half the
+  usual distance from the centre). They get the same length treatment, which let
+  them win their fair share of "Last 10 years" games instead of almost none.
 
 `model/` is committed so the weekly build doesn't need MovieLens.
 
-**Quality and popularity.** Quality is the TMDB rating shrunk toward the mean
-(so a 9.0 from 40 votes doesn't beat an 8.5 from 20,000). Popularity is the vote
+**Quality and popularity.** Quality is the IMDb rating shrunk toward the mean
+(so a 9.0 from 400 votes doesn't beat an 8.5 from 200,000), from IMDb's free
+daily ratings file (`pipeline/imdb.py`; no key, no rate limit). IMDb has 50–80
+times TMDB's votes, and TMDB's ratings of new releases run high: about +0.9
+stars in their first four months and +0.6 for the rest of the first year,
+compared with IMDb (September 2026). Ratings of films under a year old are
+shrunk up to three times harder, since early voters are fans. The rare film
+IMDb hasn't rated uses its TMDB rating. Tickets still show the TMDB score.
+Popularity is the TMDB vote
 count compared with films of the same age, since new releases haven't had time to
 collect votes: films over a year old are compared with films released within two
 years of them, and newer films with the 15 films closest to them in age (a
@@ -144,8 +162,8 @@ Change these, commit, and GitHub Pages serves the new behavior. No rebuild neede
 | `POP_PRIOR_VAR` | `0.1` | How far picks can move the popularity weight from where Favor started it. `0` fixes it at the Favor value. |
 | `WARM_CHOICES` | `20` | Each warm-up pair is picked at random from this many of the most informative candidates. `1` always shows the single best pair (the same few films every game); higher means more variety and slightly less informative openers. |
 | `RECENT_MAX` / `RECENT_DAYS` | `60` / `14` | Lineup and warm-up films remembered in the browser (localStorage) and held out of the next games' lineups and warm-ups: at most this many films, each for at most this many days. |
-| `MIN_ROUNDS` / `MAX_ROUNDS` | `7` / `12` | Earliest round the final four can start, and the round it starts regardless. Lower both for shorter games. |
-| `LEADER_SHARE` | `0.3` | How often one film must come out on top across 200 imagined versions of you to end narrowing early. Higher means longer, surer games. |
+| `MIN_ROUNDS` / `MAX_ROUNDS` | `5` / `10` | Earliest round the final four can start, and the round it starts regardless. Lower both for shorter games. |
+| `LEADER_SHARE` | `0.15` | How often one film must come out on top across 200 imagined versions of you to end narrowing early. Higher means longer, surer games. In [Evaluation](#evaluation), `0.3` with rounds `7` / `12` almost never ended early (about 15 taps a game) and picked no better winners than today's settings (about 11). |
 | `MAX_SHOWS` | `3` | How many times one film can appear in a game. |
 | `MIN_POOL` | `20` | Fewest films in the chosen year range that still allows starting. |
 | `PERSON_MIN_FILMS` | `3` | Films a director or actor needs in the pool to get a learned bonus. |
@@ -161,7 +179,10 @@ Change these, commit, and GitHub Pages serves the new behavior. No rebuild neede
 |---|---|---|---|
 | `TOP_TAGS` | `build.py` | `6` | Rebuild. Tags stored per film (tickets show 3). |
 | `SAME_TAG` | `build.py` | `0.9` | Rebuild. Duplicate threshold for those stored tags. |
-| Quality / popularity | `build.py` | quality: rating shrunk toward the mean by 300 votes; popularity: log votes minus the median of films within 2 years. Both z-scored. | Rebuild. |
+| Quality / popularity | `build.py` | quality: IMDb rating shrunk toward the mean; popularity: log TMDB votes minus the median of films within 2 years. Both z-scored. | Rebuild. |
+| `IMDB_K` / `TMDB_K` | `build.py` | `15000` / `300` | Rebuild. How many votes' worth of "average film" each rating is blended with. Higher trusts ratings from few votes less. `TMDB_K` applies only to films without an IMDb rating. |
+| `THIN_GENOME_FROM` | `build.py` | `2018` | Rebuild. MovieLens profiles of films from this year on are rescaled like predicted ones (see *Taste profiles*). |
+| `YOUNG_SHRINK` / `YOUNG_DAYS` | `build.py` | `2` / `365` | Rebuild. A new release's rating is blended with up to 1 + `YOUNG_SHRINK` times as much "average film", fading to normal at `YOUNG_DAYS` old. |
 | `NEW_DAYS` / `NEW_PEERS` | `build.py` | `365` / `15` | Rebuild. Films younger than `NEW_DAYS` get popularity relative to the `NEW_PEERS` films closest to them in age instead of their 2-year window. |
 | `POP_FLOOR` | `build.py` | `-2.5` | Rebuild. Lowest popularity score (in standard deviations). Lower it and the few films with very few votes start to dominate **Lesser-known** games. |
 | `N_CAST` | `features.py` | `3` | Retrain. Lead actors per film used for matching and prediction. |
@@ -201,7 +222,7 @@ Each movie has 26 numbers:
   while *Notting Hill* is farther from it than most films are.
   The axes don't have names, but each lines up with readable tags ("dark",
   "space", "feel-good"…), which is how the game can describe your taste in words.
-- **1 quality score.** From the TMDB rating (see *Quality and popularity*).
+- **1 quality score.** From the IMDb rating (see *Quality and popularity*).
 - **1 popularity score.** How widely seen it is compared with films of the same
   age (see *Quality and popularity*).
 
@@ -233,12 +254,12 @@ game; the winner can come back (each film appears at most 3 times).
 |---|---|---|---|
 | **Opening lineup** | 1 | Explore | Six well-known films (from the best-known ~40% of the pool), each with a different vibe: six of Animated, Rom-com, Sci-fi, Action, Comedy, Horror, Thriller, Romance, Adventure and Drama, chosen at random. Within those vibes, films are added one at a time, each as far as possible in taste space from the ones already chosen (one of the 3 farthest, for variety). Your pick counts as beating each of the other five, at reduced strength, and the five leave the game. **Skip** goes straight to the pairs, and then the warm-up runs all 3 rounds. |
 | **Warm-up** | 2–3 | Explore | From the best-known ~30% of the pool (40–300 films), it tries 400 random pairs and shows one of the 20 it would learn the most from (films from recent warm-ups on this device are held back): two films where your pick is hard to predict *and* would move the uncertain weights. In practice that means very different films. |
-| **Narrowing** | 4 up to 12 | Explore and decide | **Double Thompson sampling.** It draws two plausible versions of "you" from its current uncertainty and shows each one's favorite film. While it's unsure, the two draws disagree and you see varied options; as it gets sure, they converge on the same corner of the map. If both draws pick the same film, it pairs that film with the most informative challenger. About 15% of the time it redraws the challenger anyway, for variety. |
-| **Final four** | 3 more picks | Decide | Starts once one film is the favorite in at least 30% of 200 imagined versions of you (from round 7 on), or at round 12 regardless. The four films that win most often are seeded 1–4 and play 1 vs 4 and 2 vs 3, then the final. These picks still update the model. |
+| **Narrowing** | 4 up to 10 | Explore and decide | **Double Thompson sampling.** It draws two plausible versions of "you" from its current uncertainty and shows each one's favorite film. While it's unsure, the two draws disagree and you see varied options; as it gets sure, they converge on the same corner of the map. If both draws pick the same film, it pairs that film with the most informative challenger. About 15% of the time it redraws the challenger anyway, for variety. |
+| **Final four** | 3 more picks | Decide | Starts once one film is the favorite in at least 15% of 200 imagined versions of you (from round 5 on), or at round 10 regardless. The four films that win most often are seeded 1–4 and play 1 vs 4 and 2 vs 3, then the final. These picks still update the model. |
 | **Now showing** | — | — | The winner of the final, with its poster. |
 | **Extra rounds** (optional) | 3–5 more | More certainty | **Play 5 more rounds** on the winner screen goes back to narrowing. A new final four starts after 3 picks if one film clearly leads, otherwise after 5. The previous finalists are allowed back in, since they were close calls. |
 
-A typical game is 10–15 taps. The vibe label is mostly the film's first-listed
+A typical game is 8–13 taps, usually about 11. The vibe label is mostly the film's first-listed
 TMDB genre (so *Pulp Fiction* is a Thriller, not a Comedy). The exceptions: any
 animated film is Animated, a romance-comedy without drama is a Rom-com, and an
 action or adventure film with sci-fi in it is Sci-fi (*Star Wars*, *Dune*). The **certainty bulbs** follow this: one lights per
@@ -304,9 +325,41 @@ earned a clearly positive bonus.
   can still move it. It doesn't affect the warm-up, which always shows well-known
   films.
 
+## Evaluation
+
+`eval/` replays the game against real people: MovieLens users who each rated 300
+or more films in the current pool. Each one plays with a pool of just the films
+they rated and answers every pick by their own ratings (plus some noise). The
+score is how the named film ranks among their ratings.
+
+```
+.venv/bin/python eval/prepare.py     # one-time, needs MovieLens in raw/: writes eval/cache/
+.venv/bin/python eval/sim.py         # the game as it ships (about a minute on 48 cores)
+.venv/bin/python eval/sim.py '{"shorter":{"MAX_ROUNDS":8},"no lineup":{"lineup":false}}' 3
+```
+
+It reads the constants in `docs/app.js` and the latest `docs/movies.js`, so rebuild
+before testing a `build.py` change. `eval/sim.py`'s docstring lists the variant
+keys and output columns. Results, September 2026 (600 users, 3 games each):
+
+| | Winner's percentile among the user's ratings | Finalists vs. all users' ratings | Taps |
+|---|---|---|---|
+| As shipped | 88.6% | +0.24 stars | 11 |
+| Previous settings (7/12 rounds, 0.3 leader share, TMDB quality, per-axis stretch) | 88.7% | +0.26 stars | 15 |
+| Everyone gets the pool's top-rated film | 77.8% | — | — |
+
+"Finalists vs. all users" is how much more each user liked the final four than
+MovieLens users as a whole did, which is the personal part of the match.
+Limitations: MovieLens users have seen every film in their pool, and post-2019
+films have no MovieLens ratings, so the IMDb switch (which matters most for new
+releases) can't be scored here. To test predicted profiles, 30% of the films get
+out-of-fold predictions in place of their real profiles.
+
 ## Credits
 
 Movie data and posters from [TMDB](https://www.themoviedb.org/). This product uses
 the TMDB API but is not endorsed or certified by TMDB. Taste profiles from the
 MovieLens 25M tag genome: F. Maxwell Harper and Joseph A. Konstan, 2015,
 *The MovieLens Datasets: History and Context*, ACM TiiS. Non-commercial use.
+Ratings information courtesy of IMDb (https://www.imdb.com). Used with permission;
+[non-commercial datasets](https://developer.imdb.com/non-commercial-datasets/).
