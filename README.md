@@ -172,11 +172,10 @@ Change these, commit, and GitHub Pages serves the new behavior. No rebuild neede
 | `LEADER_SHARE` | `0.15` | How often one film must come out on top across 200 imagined versions of you to end narrowing early. Higher means longer, surer games. In [Evaluation](#evaluation), `0.3` with rounds `7` / `12` almost never ended early (about 15 taps a game) and picked no better winners than today's settings (about 11). |
 | `MAX_SHOWS` | `3` | How many times one film can appear in a game. |
 | `MIN_POOL` | `20` | Fewest films in the chosen year range that still allows starting. |
-| `PERSON_MIN_FILMS` | `3` | Films a director or actor needs in the pool to get a learned bonus. |
-| `PERSON_PRIOR_VAR` / `PERSON_CAP` | `0.12` / `0.9` | How quickly person bonuses grow, and their ceiling. Lower both to make directors and actors matter less. |
+| `PERSON_MIN_FILMS` | `3` | Films a director needs in the pool to get a learned bonus. |
+| `PERSON_PRIOR_VAR` / `PERSON_CAP` | `0.12` / `0.9` | How quickly person bonuses grow, and their ceiling. Lower both to make directors matter less. |
 | `SAME_TAG` | `0.9` | How closely two tags must align to count as duplicates on labels. |
 | `HIDDEN_TAGS` | list | Tags used for matching but never shown as labels. |
-| `PRESETS` | 5 ranges | The year-range shortcut buttons on the start screen. |
 | extra rounds | `+3` / `+5` | In `moreRounds()`: earliest and latest pick at which **Play 5 more rounds** starts a new final four. |
 
 ### Build and model: `pipeline/`
@@ -236,7 +235,7 @@ Each movie has 26 numbers:
 
 Your taste is a set of 26 weights, one per number above. A movie's appeal to you
 is its numbers multiplied by your weights and added up, plus a small bonus for
-directors and actors you've shown you like.
+directors you've shown you like.
 
 The game never knows your weights exactly. It keeps a best guess **and** how unsure
 it is about each one (a Gaussian distribution). It starts out knowing nothing
@@ -280,15 +279,14 @@ already shown. A few tags are used for matching but never shown as labels becaus
 they're explicit or judgemental ("pornography", "lame"…); see `HIDDEN_TAGS` in
 `docs/app.js`.
 
-### Directors and actors
+### Directors
 
-Directors and lead actors (top 3 billed) with **3 or more films in the pool** each
+Directors with **3 or more films in the pool** each
 get their own small learned bonus. Pick two Villeneuve films and his others get a
 boost. These bonuses are tracked independently (it keeps phones fast, and a dozen
 picks can't teach much about how people relate to each other). Each bonus starts
 at zero and is capped at ±0.9 so one favorite can't take over.
 
-The **Match on actors** switch turns off the actor bonuses; directors always count.
 The winner screen's **People** row lists anyone you picked at least twice who
 earned a clearly positive bonus.
 
@@ -321,11 +319,10 @@ earned a clearly positive bonus.
 
 ### The pool and filters
 
-- **Release years** and **Skip movies still in theaters** decide which films can
-  appear at all. The game needs at least 20 films in range to start.
-- "In theaters" means on TMDB's US now-playing list when the list was built, or
-  released in the last ~2 months. Films more than ~100 days old never count as in
-  theaters, even if the list is stale.
+- **Release years** decide which films can appear at all. The game needs at least 20 films in range to start.
+- Films still in theaters get an "In theaters" tag: on TMDB's US now-playing list
+  when the list was built, or released in the last ~2 months. Films more than ~100
+  days old never count as in theaters, even if the list is stale.
 - **Favor: Hidden gem / Balanced / Blockbuster** (Balanced by default) doesn't
   remove any films. It sets the popularity weight for the whole game; picks don't
   change it. It doesn't affect the lineup and warm-up, which always show

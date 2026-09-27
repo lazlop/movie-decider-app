@@ -157,20 +157,6 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .presets button[aria-pressed="true"] { background: var(--bulb); color: var(--ink); border-color: var(--bulb); }
 
 .field-label { margin: 6px 0 0; font-size: 15px; }
-.toggle { display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 15px; }
-.toggle input { position: absolute; opacity: 0; width: 1px; height: 1px; }
-.switch {
-  flex: none; position: relative; width: 42px; height: 24px; border-radius: 12px;
-  background: var(--bulb-off); transition: background .2s;
-}
-.switch::after {
-  content: ""; position: absolute; left: 3px; top: 3px; width: 18px; height: 18px; border-radius: 50%;
-  background: var(--text); transition: transform .2s var(--ease);
-}
-.toggle input:checked + .switch { background: var(--bulb); }
-.toggle input:checked + .switch::after { transform: translateX(18px); background: var(--ink); }
-.toggle input:focus-visible + .switch { outline: 3px solid var(--bulb); outline-offset: 2px; }
-.toggle small { color: var(--muted); font-size: 13px; }
 .btn-primary:disabled { opacity: .45; cursor: default; box-shadow: none; }
 .howto { margin: 0; font-size: 14px; color: var(--muted); }
 

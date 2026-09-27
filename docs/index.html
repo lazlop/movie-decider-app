@@ -26,7 +26,7 @@
   <section class="screen start" id="screen-start">
     <div class="sample" id="sample" aria-hidden="true"></div>
     <h1>Two movies. Pick one. Repeat.</h1>
-    <p class="lede">Each tap teaches Reel Duel what you're in the mood for. In about a dozen picks it narrows <span id="pool-size">thousands of</span> popular films to the one you should watch tonight.</p>
+    <p class="lede">Find the movie you're in the mood for!</p>
     <fieldset class="years">
       <legend>Release years</legend>
       <div class="years-readout">
@@ -38,20 +38,9 @@
         <input type="range" id="yr-from" aria-label="Earliest release year" step="1">
         <input type="range" id="yr-to" aria-label="Latest release year" step="1">
       </div>
-      <div class="presets" id="presets"></div>
-      <label class="toggle" for="skip-theaters">
-        <input type="checkbox" id="skip-theaters">
-        <span class="switch" aria-hidden="true"></span>
-        <span>Skip movies still in theaters</span>
-      </label>
     </fieldset>
     <fieldset class="years">
       <legend>Matching</legend>
-      <label class="toggle" for="use-actors">
-        <input type="checkbox" id="use-actors" checked>
-        <span class="switch" aria-hidden="true"></span>
-        <span>Match on actors <small>(directors always count)</small></span>
-      </label>
       <p class="field-label" id="popularity-label">Favor</p>
       <div class="presets" id="popularity" role="group" aria-labelledby="popularity-label"></div>
     </fieldset>

@@ -11,8 +11,8 @@
  * the start screen's Favor setting and fixed for the game: players pick on vibe,
  * which favors films they know, so picks would mislead it.
  *
- * People bonus: directors and lead actors with 3+ films in the pool get their
- * own small weight (actors can be switched off on the start screen), kept as independent Gaussians (cheap on a phone, and too
+ * People bonus: directors with 3+ films in the pool get their
+ * own small weight, kept as independent Gaussians (cheap on a phone, and too
  * few picks to learn correlations between people anyway).
  *
  * Pair selection moves from exploring to deciding:
@@ -92,27 +92,18 @@
 
   // People who appear often enough for the game to learn something about them.
   const credits = new Map();
-  for (const m of movies) for (const p of new Set([...m.directors, ...m.cast])) credits.set(p, (credits.get(p) || 0) + 1);
+  for (const m of movies) for (const p of new Set(m.directors)) credits.set(p, (credits.get(p) || 0) + 1);
   const bonusIndex = new Map();
   for (const [p, n] of credits) if (n >= PERSON_MIN_FILMS) bonusIndex.set(p, bonusIndex.size);
   const bonusPerson = [...bonusIndex.keys()];
   const P = bonusIndex.size;
   for (const m of movies) {
-    m.bp = [...new Set([...m.directors, ...m.cast])].filter((p) => bonusIndex.has(p)).map((p) => bonusIndex.get(p));
-    m.bpDir = m.directors.filter((p) => bonusIndex.has(p)).map((p) => bonusIndex.get(p));
+    m.bp = [...new Set(m.directors)].filter((p) => bonusIndex.has(p)).map((p) => bonusIndex.get(p));
   }
-  // People whose weight counts for a film, depending on the "Match on actors" switch.
-  const bpOf = (m) => (!m.bpDir ? m.bp || [] : st && st.filters.actors ? m.bp : m.bpDir);
+  const bpOf = (m) => m.bp || [];
 
   const YEAR_MIN = Math.floor(Math.min(...movies.map((m) => m.year)) / 10) * 10;
   const YEAR_MAX = Math.max(today.getFullYear(), built.getFullYear());
-  const PRESETS = [
-    ["Any year", YEAR_MIN, YEAR_MAX],
-    ["Before 1980", YEAR_MIN, 1979],
-    ["80s & 90s", 1980, 1999],
-    ["2000s & 2010s", 2000, 2019],
-    ["Last 10 years", YEAR_MAX - 9, YEAR_MAX],
-  ];
 
   const GENRE_LABEL = { "Science Fiction": "Sci-Fi" };
   const STOCK = [
@@ -170,7 +161,7 @@
   let st = null;
   let history = [];
   let busy = false;
-  const filters = { from: YEAR_MIN, to: YEAR_MAX, skipTheaters: false, actors: true, popularity: "balanced" };
+  const filters = { from: YEAR_MIN, to: YEAR_MAX, popularity: "balanced" };
 
   function freshState() {
     const mu = new Float64Array(D);
@@ -252,7 +243,7 @@
     }
   }
 
-  const inRange = (m, f) => m.year >= f.from && m.year <= f.to && !(f.skipTheaters && m.theaters);
+  const inRange = (m, f) => m.year >= f.from && m.year <= f.to;
   const available = () => movies.filter((m) =>
     inRange(m, st.filters) && !st.out.has(m.id) && (st.shows[m.id] || 0) < MAX_SHOWS);
 
@@ -836,7 +827,7 @@
   }
 
   // ---------- start screen: year range ----------
-  const yrFrom = $("yr-from"), yrTo = $("yr-to"), theatersBox = $("skip-theaters"), actors = $("use-actors");
+  const yrFrom = $("yr-from"), yrTo = $("yr-to");
 
   function renderFilters() {
     yrFrom.value = filters.from;
@@ -847,16 +838,11 @@
     const fill = $("dual-fill");
     fill.style.left = `${((filters.from - YEAR_MIN) / span) * 100}%`;
     fill.style.right = `${((YEAR_MAX - filters.to) / span) * 100}%`;
-    theatersBox.checked = filters.skipTheaters;
-    actors.checked = filters.actors;
     for (const btn of $("popularity").children) btn.setAttribute("aria-pressed", String(btn.dataset.pop === filters.popularity));
     const n = movies.filter((m) => inRange(m, filters)).length;
     $("yr-count").textContent = `${n.toLocaleString()} movies`;
     $("start").disabled = n < MIN_POOL;
     $("start").textContent = n < MIN_POOL ? "Widen the years a little" : "Start the duel";
-    for (const btn of $("presets").children) {
-      btn.setAttribute("aria-pressed", String(+btn.dataset.from === filters.from && +btn.dataset.to === filters.to));
-    }
     try { localStorage.setItem("reelduel.filters", JSON.stringify(filters)); } catch (e) { /* storage unavailable */ }
   }
 
@@ -867,27 +853,14 @@
       if (saved) Object.assign(filters, {
         from: Math.max(YEAR_MIN, Math.min(YEAR_MAX, +saved.from || YEAR_MIN)),
         to: Math.max(YEAR_MIN, Math.min(YEAR_MAX, +saved.to || YEAR_MAX)),
-        skipTheaters: !!saved.skipTheaters,
-        actors: saved.actors !== false,
         popularity: saved.popularity in POPULARITY ? saved.popularity : "balanced",
       });
     } catch (e) { /* storage unavailable */ }
-    $("presets").innerHTML = PRESETS.map(([label, from, to]) =>
-      `<button type="button" data-from="${from}" data-to="${to}">${label}</button>`).join("");
-    $("presets").addEventListener("click", (e) => {
-      const btn = e.target.closest("button");
-      if (!btn) return;
-      filters.from = +btn.dataset.from;
-      filters.to = +btn.dataset.to;
-      renderFilters();
-    });
     yrFrom.addEventListener("input", () => { filters.from = Math.min(+yrFrom.value, filters.to); renderFilters(); });
     yrTo.addEventListener("input", () => { filters.to = Math.max(+yrTo.value, filters.from); renderFilters(); });
     // When both thumbs meet, keep the one that can still move on top.
     yrFrom.addEventListener("pointerdown", () => { yrFrom.style.zIndex = 2; yrTo.style.zIndex = 1; });
     yrTo.addEventListener("pointerdown", () => { yrTo.style.zIndex = 2; yrFrom.style.zIndex = 1; });
-    theatersBox.addEventListener("change", () => { filters.skipTheaters = theatersBox.checked; renderFilters(); });
-    actors.addEventListener("change", () => { filters.actors = actors.checked; renderFilters(); });
     $("popularity").innerHTML = Object.entries(POPULARITY).map(([key, [label]]) =>
       `<button type="button" data-pop="${key}">${label}</button>`).join("");
     $("popularity").addEventListener("click", (e) => {
