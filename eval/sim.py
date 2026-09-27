@@ -24,7 +24,7 @@ Variant keys (JSON object per variant; anything omitted is as shipped):
   any constant from app.js read below, e.g. MAX_ROUNDS, LEADER_SHARE, LINEUP_SCALE
   "lineup": false     skip the opening lineup
   "q_mu", "q_var"     quality weight prior (0.5, 0.06 in app.js)
-  "pop_mu": -0.8      starting popularity weight, as set by the start screen's Favor
+  "pop_mu": -0.8      starting popularity weight, as set by the start screen's Obscurity
                       buttons (Balanced, 0, is the default)
   "people": false     no director/actor bonuses
   "actors": true      bonuses for lead actors too (the app counts directors only)

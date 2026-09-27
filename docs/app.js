@@ -8,7 +8,7 @@
  * folded in with one moment-matching (assumed density filtering) step.
  *
  * Popularity (votes relative to films of the same era) has its own weight, set by
- * the start screen's Favor setting and fixed for the game: players pick on vibe,
+ * the start screen's Obscurity setting and fixed for the game: players pick on vibe,
  * which favors films they know, so picks would mislead it.
  *
  * People bonus: directors with 3+ films in the pool get their
@@ -45,8 +45,8 @@
   const PERSON_MIN_FILMS = 3;
   const PERSON_PRIOR_VAR = 0.12;
   const PERSON_CAP = 0.9;
-  const POP_PRIOR_VAR = 0;         // how far picks can move the popularity weight (0: Favor sets it)
-  // Start-screen Favor setting: popularity weight per SD of era-relative votes. Keys
+  const POP_PRIOR_VAR = 0;         // how far picks can move the popularity weight (0: Obscurity sets it)
+  // Start-screen Obscurity setting: popularity weight per SD of era-relative votes. Keys
   // are what's saved on the device. eval/sim.py: Hidden gem's winners sit at about
   // the 40th percentile of popularity (the old -0.3 left them at the 76th).
   const POPULARITY = { obscure: ["Hidden gem", -0.8], balanced: ["Balanced", 0], popular: ["Blockbuster", 0.3] };
@@ -890,7 +890,6 @@
   // ---------- boot ----------
   const byTitle = (t, fallback) => movies.find((m) => m.title === t) || movies[fallback];
   $("sample").innerHTML = ticketHTML(byTitle("Toy Story", 1)) + ticketHTML(byTitle("Pulp Fiction", 0));
-  $("pool-size").textContent = movies.length.toLocaleString();
   $("built").textContent = `Movie list updated ${built.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}.`;
   setupFilters();
   $("start").addEventListener("click", start);

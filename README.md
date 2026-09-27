@@ -90,7 +90,7 @@ year's trending films), and without the floor they would win nearly every game
 for players who choose **Hidden gem**.
 
 The game learns how much you care about quality from your picks. Popularity is
-different: the start screen's **Favor: Hidden gem / Balanced / Blockbuster** sets
+different: the start screen's **Obscurity: Hidden gem / Balanced / Blockbuster** sets
 it, and picks don't change it. You're meant to pick on vibe, which favors films
 you know, so picks would make the game think you prefer well-known films.
 
@@ -149,7 +149,7 @@ Things to keep in mind:
   obscure titles) get predicted taste profiles, which are rougher. Bigger pools
   and newer-leaning steps raise that share; the build prints it ("predicting N").
 - **The warm-up** always draws from the best-known ~30% of whatever is in range
-  (by vote count, whatever the **Favor** setting), and the opening lineup from
+  (by vote count, whatever the **Obscurity** setting), and the opening lineup from
   the best-known ~40%, so a bigger pool doesn't make the first rounds more
   obscure. Films shown in recent lineups and warm-ups on the same device are
   held back, and the next most-voted films take their place.
@@ -164,8 +164,8 @@ Change these, commit, and GitHub Pages serves the new behavior. No rebuild neede
 | `LINEUP_SIZE` | `6` | Films in the opening lineup, each with a different vibe. |
 | `LINEUP_SCALE` | `1.5` | Softens the lineup pick's five comparisons (higher = each counts for less). They all come from one tap, so at full strength they'd make the game too sure of itself too early. |
 | `PRIMARY_VIBE` / `vibeOf()` | 10 vibes | How films get their lineup label (Animated, Rom-com, Sci-fi, Action, Comedy, Horror, Thriller, Romance, Adventure, Drama), mostly from the film's first-listed TMDB genre. |
-| `POPULARITY` | `−0.8` / `0` / `+0.3` | The start screen's **Favor** options (Hidden gem / Balanced / Blockbuster): the popularity weight, per standard deviation of popularity. Balanced is the default. In [Evaluation](#evaluation), Hidden gem's winners sit around the 40th percentile of popularity among the player's films and Blockbuster's around the 92nd (Balanced: 86th, since acclaimed films are also well known). Stronger Hidden gem values trade away more personal fit; stronger Blockbuster values concentrate the wins on a handful of classics. |
-| `POP_PRIOR_VAR` | `0` | How far picks can move the popularity weight from the Favor value. `0` fixes it: players pick on vibe, which favors familiar films and would mislead it. |
+| `POPULARITY` | `−0.8` / `0` / `+0.3` | The start screen's **Obscurity** options (Hidden gem / Balanced / Blockbuster): the popularity weight, per standard deviation of popularity. Balanced is the default. In [Evaluation](#evaluation), Hidden gem's winners sit around the 40th percentile of popularity among the player's films and Blockbuster's around the 92nd (Balanced: 86th, since acclaimed films are also well known). Stronger Hidden gem values trade away more personal fit; stronger Blockbuster values concentrate the wins on a handful of classics. |
+| `POP_PRIOR_VAR` | `0` | How far picks can move the popularity weight from the Obscurity value. `0` fixes it: players pick on vibe, which favors familiar films and would mislead it. |
 | `WARM_CHOICES` | `20` | Each warm-up pair is picked at random from this many of the most informative candidates. `1` always shows the single best pair (the same few films every game); higher means more variety and slightly less informative openers. |
 | `RECENT_MAX` / `RECENT_DAYS` | `60` / `14` | Lineup and warm-up films remembered in the browser (localStorage) and held out of the next games' lineups and warm-ups: at most this many films, each for at most this many days. |
 | `MIN_ROUNDS` / `MAX_ROUNDS` | `4` / `9` | Earliest round the final four can start, and the round it starts regardless. Lower both for shorter games. |
@@ -241,7 +241,7 @@ The game never knows your weights exactly. It keeps a best guess **and** how uns
 it is about each one (a Gaussian distribution). It starts out knowing nothing
 about your taste, except for a mild assumption that you prefer well-rated films
 (quality weight starts at 0.5). The popularity weight comes from the start
-screen's Favor option (−0.8, 0 or +0.3) and stays put.
+screen's Obscurity option (−0.8, 0 or +0.3) and stays put.
 
 ### What one tap does
 
@@ -323,7 +323,7 @@ earned a clearly positive bonus.
 - Films still in theaters get an "In theaters" tag: on TMDB's US now-playing list
   when the list was built, or released in the last ~2 months. Films more than ~100
   days old never count as in theaters, even if the list is stale.
-- **Favor: Hidden gem / Balanced / Blockbuster** (Balanced by default) doesn't
+- **Obscurity: Hidden gem / Balanced / Blockbuster** (Balanced by default) doesn't
   remove any films. It sets the popularity weight for the whole game; picks don't
   change it. It doesn't affect the lineup and warm-up, which always show
   well-known films so you can judge them.
