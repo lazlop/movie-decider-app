@@ -111,7 +111,9 @@ Things to keep in mind:
   obscure titles) get predicted taste profiles, which are rougher. Bigger pools
   and newer-leaning steps raise that share; the build prints it ("predicting N").
 - **The warm-up** always draws from the best-known ~30% of whatever is in range,
-  so a bigger pool doesn't make the first rounds more obscure.
+  so a bigger pool doesn't make the first rounds more obscure. Films shown in
+  recent warm-ups on the same device are held back, and the next most-voted
+  films take their place.
 
 ### Game behavior: constants in `docs/app.js`
 
@@ -120,6 +122,8 @@ Change these, commit, and GitHub Pages serves the new behavior. No rebuild neede
 | Constant | Default | What it does |
 |---|---|---|
 | `WARMUP_ROUNDS` | `3` | Rounds of pure exploration before narrowing. |
+| `WARM_CHOICES` | `20` | Each warm-up pair is picked at random from this many of the most informative candidates. `1` always shows the single best pair (the same few films every game); higher means more variety and slightly less informative openers. |
+| `RECENT_MAX` / `RECENT_DAYS` | `36` / `14` | Warm-up films remembered in the browser (localStorage) and held out of the next games' warm-ups: at most this many films, each for at most this many days. |
 | `MIN_ROUNDS` / `MAX_ROUNDS` | `7` / `12` | Earliest round the final four can start, and the round it starts regardless. Lower both for shorter games. |
 | `LEADER_SHARE` | `0.3` | How often one film must come out on top across 200 imagined versions of you to end narrowing early. Higher means longer, surer games. |
 | `MAX_SHOWS` | `3` | How many times one film can appear in a game. |
@@ -202,7 +206,7 @@ game; the winner can come back (each film appears at most 3 times).
 
 | Phase | Rounds | Goal | How the two movies are chosen |
 |---|---|---|---|
-| **Warm-up** | 1–3 | Explore | From the best-known ~30% of the pool (40–300 films), it tries 400 random pairs and shows the one it learns the most from: two films where your pick is hard to predict *and* would move the uncertain weights. In practice that means very different films. |
+| **Warm-up** | 1–3 | Explore | From the best-known ~30% of the pool (40–300 films), it tries 400 random pairs and shows one of the 20 it would learn the most from (films from recent warm-ups on this device are held back): two films where your pick is hard to predict *and* would move the uncertain weights. In practice that means very different films. |
 | **Narrowing** | 4 up to 12 | Explore and decide | **Double Thompson sampling.** It draws two plausible versions of "you" from its current uncertainty and shows each one's favorite film. While it's unsure, the two draws disagree and you see varied options; as it gets sure, they converge on the same corner of the map. If both draws pick the same film, it pairs that film with the most informative challenger. About 15% of the time it redraws the challenger anyway, for variety. |
 | **Final four** | 3 more picks | Decide | Starts once one film is the favorite in at least 30% of 200 imagined versions of you (from round 7 on), or at round 12 regardless. The four films that win most often are seeded 1–4 and play 1 vs 4 and 2 vs 3, then the final. These picks still update the model. |
 | **Now showing** | — | — | The winner of the final, with its poster. |

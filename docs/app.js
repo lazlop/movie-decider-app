@@ -12,7 +12,8 @@
  * few picks to learn correlations between people anyway).
  *
  * Pair selection moves from exploring to deciding:
- *   warm-up   pairs of well-known films that maximise expected information
+ *   warm-up   pairs of well-known films, drawn from the most informative ones
+ *             (films opened with on recent visits are held back)
  *   narrowing double Thompson sampling: two posterior draws, each one's favourite
  *   final 4   a small bracket between the posterior's four likeliest winners
  */
@@ -23,6 +24,9 @@
   const K = DATA.dims;
   const D = K + 1;                 // taste dims + quality weight
   const WARMUP_ROUNDS = 3;
+  const WARM_CHOICES = 20;         // each warm-up pair is one of this many most informative
+  const RECENT_MAX = 36;           // warm-up films remembered across visits (about six nights)
+  const RECENT_DAYS = 14;          // ...and forgotten after this long
   const MIN_ROUNDS = 7;
   const MAX_ROUNDS = 12;
   const LEADER_SHARE = 0.3;        // Thompson share that triggers the final four
@@ -166,6 +170,7 @@
       picks: [],
       certainty: 0,
       winner: null,
+      recent: new Set(loadRecent().map(([id]) => id)),
     };
   }
 
@@ -249,9 +254,27 @@
     return v * q * (1 - q);
   }
 
+  // Warm-up films from recent visits on this device, as [tmdb id, time shown].
+  const RECENT_KEY = "reelduel.recentWarm";
+  function loadRecent() {
+    try {
+      const cutoff = Date.now() - RECENT_DAYS * DAY;
+      return JSON.parse(localStorage.getItem(RECENT_KEY) || "[]").filter(([, t]) => t > cutoff);
+    } catch (e) { return []; }
+  }
+  function rememberWarm(shown) {
+    try {
+      const ids = new Set(shown.map((m) => m.tmdb)), now = Date.now();
+      const kept = loadRecent().filter(([id]) => !ids.has(id));
+      localStorage.setItem(RECENT_KEY, JSON.stringify([...kept, ...[...ids].map((id) => [id, now])].slice(-RECENT_MAX)));
+    } catch (e) { /* storage unavailable */ }
+  }
+
   function familiar(pool) {
     const n = Math.max(40, Math.min(300, Math.round(pool.length * 0.3)));
-    return pool.slice(0, n);                        // pool is sorted by vote count
+    // Hold back recent warm-up films, unless the filters leave too few without them.
+    const fresh = pool.filter((m) => !st.recent.has(m.tmdb));
+    return (fresh.length >= n ? fresh : pool).slice(0, n);   // pool is sorted by vote count
   }
 
   function bestPartner(a, pool, tries = 250) {
@@ -265,16 +288,19 @@
     return best;
   }
 
+  // One of the most informative random pairs, not always the very best, so the
+  // same few extreme films don't open every game.
   function warmPair(pool) {
     const fam = familiar(pool);
-    let best = null, bv = -1;
+    const scored = [];
     for (let t = 0; t < 400; t++) {
       const a = fam[(Math.random() * fam.length) | 0], b = fam[(Math.random() * fam.length) | 0];
       if (a.id === b.id) continue;
-      const v = info(a, b);
-      if (v > bv) { bv = v; best = [a, b]; }
+      scored.push([info(a, b), a, b]);
     }
-    return best;
+    scored.sort((p, q) => q[0] - p[0]);
+    const [, a, b] = scored[(Math.random() * Math.min(WARM_CHOICES, scored.length)) | 0];
+    return [a, b];
   }
 
   function narrowPair(pool) {
@@ -335,7 +361,9 @@
       st.pair = narrowPair(pool).map((m) => m.id);
     } else if (st.phase === "warm") {
       st.certainty = st.round;
-      st.pair = warmPair(pool).map((m) => m.id);
+      const pair = warmPair(pool);
+      rememberWarm(pair);
+      st.pair = pair.map((m) => m.id);
     } else {
       st.pair = st.bracket.matches[st.bracket.stage];
     }
@@ -422,6 +450,7 @@
       }
     } else if (st.phase === "warm") {
       repl = bestPartner(keep, familiar(pool));
+      if (repl) rememberWarm([repl]);
     } else {
       repl = argmax(pool, sampleTaste());
     }
