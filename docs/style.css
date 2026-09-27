@@ -256,11 +256,13 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .title.xlong { font-size: 23px; }
 .tags { font-size: 14px; line-height: 1.35; color: var(--ink-soft); }
 .foot {
-  margin-top: auto; display: flex; justify-content: space-between; align-items: center; gap: 8px;
+  margin-top: auto; display: flex; justify-content: space-between; align-items: center; gap: 6px 8px; flex-wrap: wrap;
   font: 400 12px/1 var(--mono); color: var(--ink-soft);
   border-top: 1px dotted rgba(28, 18, 22, .35); padding-top: 8px;
 }
-.skip {
+.acts { flex: none; display: flex; gap: 6px; }
+.info { text-decoration: none; }
+.skip, .info {
   flex: none;
   border: 1.5px solid rgba(28, 18, 22, .55); border-radius: 999px;
   background: rgba(255,255,255,.25);

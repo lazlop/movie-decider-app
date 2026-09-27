@@ -234,7 +234,9 @@ earned a clearly positive bonus.
 
 ### Buttons that change the game
 
-- **Skip** swaps a movie out without learning anything from it. Use it for films
+- **Info ↗** on each ticket opens the film's TMDB page (synopsis, cast,
+  trailer) in a new tab. It doesn't count as a pick.
+- **Next option** swaps a movie out without learning anything from it. Use it for films
   you can't judge; films you've seen are worth voting on. In the warm-up the
   replacement is again the most informative film, in narrowing it's a posterior
   draw's favorite, and in the final four it's the next-best film overall.

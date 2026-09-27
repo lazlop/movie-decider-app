@@ -503,7 +503,7 @@
           <div class="tags">${esc(tags)}</div>
           <div class="foot">
             <span>★ ${m.score.toFixed(1)} · ${fmtRuntime(m.runtime)}</span>
-            ${interactive ? `<button class="skip" type="button">Skip</button>` : `<span>${fmtCount(m.votes)} votes</span>`}
+            ${interactive ? `<span class="acts"><a class="info" href="https://www.themoviedb.org/movie/${m.tmdb}" target="_blank" rel="noopener" aria-label="${esc("About " + m.title + " (opens TMDB)")}">Info ↗</a><button class="skip" type="button">Next option</button></span>` : `<span>${fmtCount(m.votes)} votes</span>`}
           </div>
         </div>
         ${poster}
@@ -517,6 +517,7 @@
     const t = el.querySelector(".ticket");
     if (enter && !reduceMotion()) t.classList.add("enter");
     t.addEventListener("click", (e) => {
+      if (e.target.closest(".info")) return;
       if (e.target.closest(".skip")) return skip(slot);
       pick(slot);
     });
