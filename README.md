@@ -35,19 +35,8 @@ unzipped into `raw/` (git-ignored):
 `curl -LO https://files.grouplens.org/datasets/movielens/ml-25m.zip`.
 
 **The pool.** The most-voted TMDB films for every release year, plus what's
-playing in US theaters. How many films make it in is set in `config.json`:
-
-| Setting | Default | Meaning |
-|---|---|---|
-| `per_year` | 5 a year from 1920, 10 from 1940, 18 from 1960, 30 from 1980, 45 from 1990 | Films per release year, as `[from_year, count]` steps |
-| `scale` | 1.0 | Multiplies every step. 2.0 gives ~5,100 films (1.8 MB) instead of ~2,600 (0.9 MB), still well-known titles |
-| `min_votes` / `min_votes_recent` | 200 / 80 | TMDB votes a film needs (the lower bar applies to the last two years) |
-| `now_playing_min_votes` | 50 | Votes an in-theaters film needs |
-| `first_year` | 1920 | Earliest release year |
-
-Edit it (GitHub's web editor works) and the next build, weekly or run by hand,
-uses it. The game scores every film each round; at 5,000 films that's ~30 ms
-on a desktop, so pools up to several thousand films stay responsive on phones.
+playing in US theaters. Its size is set in `config.json`; see
+[Configuration](#configuration).
 
 **Taste profiles.** MovieLens's tag genome scores about 14,000 films on 1,128
 descriptive tags. That's great mood and theme data, but it stops around 2019. So:
@@ -68,6 +57,108 @@ descriptive tags. That's great mood and theme data, but it stops around 2019. So
 
 **Quality prior.** A shrunk TMDB rating, plus the vote count compared with films
 from the same few years (new releases haven't had time to collect votes).
+
+## Configuration
+
+Everything you can adjust, from most to least likely to need it.
+
+### Movie pool: `config.json`
+
+Controls which films enter the game. It's read by `pipeline/tmdb.py pool`, so a
+change takes effect on the next build: the Monday refresh, a manual run of the
+**Refresh movie list** workflow (Actions tab → Run workflow), or locally with
+`python3 pipeline/tmdb.py pool && .venv/bin/python pipeline/build.py`. You can edit
+the file in GitHub's web editor.
+
+```json
+{
+  "pool": {
+    "first_year": 1920,
+    "per_year": [[1920, 5], [1940, 10], [1960, 18], [1980, 30], [1990, 45]],
+    "scale": 1.0,
+    "min_votes": 200,
+    "min_votes_recent": 80,
+    "now_playing_min_votes": 50
+  }
+}
+```
+
+| Setting | Default | What it does |
+|---|---|---|
+| `per_year` | see above | How many films each release year contributes, as `[from_year, count]` steps. Each step holds until the next: `[1990, 45]` means 45 films a year from 1990 on. Within a year, films are ranked by TMDB vote count (the current year by popularity, since its films are still collecting votes). |
+| `scale` | `1.0` | Multiplies every `per_year` count, then rounds. The quickest way to grow or shrink the whole pool. |
+| `min_votes` | `200` | TMDB votes a film needs to be considered at all. Raise it for only well-known films; lower it for deeper cuts. A year with fewer qualifying films than its count just contributes fewer. |
+| `min_votes_recent` | `80` | The same bar for the current and previous year, which haven't had time to collect votes. |
+| `now_playing_min_votes` | `50` | Votes a film on TMDB's US now-playing list needs to be added even if it missed its year's cut. |
+| `first_year` | `1920` | Earliest release year fetched. |
+
+What `scale` does in practice (measured September 2026):
+
+| `scale` | Films | `movies.js` | Films per year from 1990 | Example of the least-voted films added |
+|---|---|---|---|---|
+| `1.0` | ~2,600 | 0.9 MB | 45 | — |
+| `2.0` | ~5,100 | 1.8 MB | 90 | *Mighty Aphrodite*, *Rob Roy*, *Colossus: The Forbin Project* |
+
+To reshape rather than resize, edit the steps. For example, more recent films:
+`[[1920, 5], [1960, 15], [1990, 45], [2010, 80]]`.
+
+Things to keep in mind:
+
+- **Speed.** Each round the game scores every film 200 times. At 5,000 films
+  that's about 30 ms on a desktop and roughly 100–150 ms on a phone, so pools
+  of several thousand films are fine.
+- **Predicted profiles.** Films MovieLens never scored (mostly post-2019 and
+  obscure titles) get predicted taste profiles, which are rougher. Bigger pools
+  and newer-leaning steps raise that share; the build prints it ("predicting N").
+- **The warm-up** always draws from the best-known ~30% of whatever is in range,
+  so a bigger pool doesn't make the first rounds more obscure.
+
+### Game behavior: constants in `docs/app.js`
+
+Change these, commit, and GitHub Pages serves the new behavior. No rebuild needed.
+
+| Constant | Default | What it does |
+|---|---|---|
+| `WARMUP_ROUNDS` | `3` | Rounds of pure exploration before narrowing. |
+| `MIN_ROUNDS` / `MAX_ROUNDS` | `7` / `12` | Earliest round the final four can start, and the round it starts regardless. Lower both for shorter games. |
+| `LEADER_SHARE` | `0.3` | How often one film must come out on top across 200 imagined versions of you to end narrowing early. Higher means longer, surer games. |
+| `MAX_SHOWS` | `3` | How many times one film can appear in a game. |
+| `MIN_POOL` | `20` | Fewest films in the chosen year range that still allows starting. |
+| `PERSON_MIN_FILMS` | `3` | Films a director or actor needs in the pool to get a learned bonus. |
+| `PERSON_PRIOR_VAR` / `PERSON_CAP` | `0.12` / `0.9` | How quickly person bonuses grow, and their ceiling. Lower both to make directors and actors matter less. |
+| `SAME_TAG` | `0.9` | How closely two tags must align to count as duplicates on labels. |
+| `HIDDEN_TAGS` | list | Tags used for matching but never shown as labels. |
+| `PRESETS` | 5 ranges | The year-range shortcut buttons on the start screen. |
+| extra rounds | `+3` / `+5` | In `moreRounds()`: earliest and latest pick at which **Play 5 more rounds** starts a new final four. |
+
+### Build and model: `pipeline/`
+
+| Setting | Where | Default | Needs |
+|---|---|---|---|
+| `TOP_TAGS` | `build.py` | `6` | Rebuild. Tags stored per film (tickets show 3). |
+| `SAME_TAG` | `build.py` | `0.9` | Rebuild. Duplicate threshold for those stored tags. |
+| Quality prior | `build.py` | rating shrunk toward the mean by 300 votes; blend 0.6 rating / 0.4 era-relative votes | Rebuild. |
+| `N_CAST` | `features.py` | `3` | Retrain. Lead actors per film used for matching and prediction. |
+| `ENCODER` | `features.py` | `all-mpnet-base-v2` | Retrain. The sentence-transformer used for plots and keywords. |
+| `DIMS` | `train.py` | `24` | Retrain. Size of the taste space. |
+| `VOCAB` | `train.py` | `300` | Retrain. Readable tags kept for labels. |
+| `KW_MIN` | `train.py` | `25` | Retrain. How often a TMDB keyword must appear to be used as a feature. |
+| `PCA_MIN_VOTES` | `train.py` | `150` | Retrain. Films the taste space is fitted on. |
+| `BLOCK`, `RENAME` | `train.py` | lists | Retrain. Tags excluded from or renamed in the vocabulary. |
+
+"Rebuild" means `.venv/bin/python pipeline/build.py` (or the weekly workflow).
+"Retrain" means running the one-time steps again (`pipeline/tmdb.py training`,
+then `pipeline/train.py`, which prints held-out accuracy) and committing
+`model/`. It needs MovieLens in `raw/`.
+
+### Refresh schedule and secrets
+
+- **Schedule:** `.github/workflows/refresh-movies.yml`, `cron: "0 9 * * 1"`
+  (Mondays 09:00 UTC). It also has a manual **Run workflow** button.
+- **`TMDB_API_KEY`:** a repository secret (Settings → Secrets and variables →
+  Actions). Locally, put it in `.env`.
+- **Workflow permissions:** Settings → Actions → General → "Read and write", so
+  the workflow can commit the refreshed `docs/movies.js`.
 
 ## How the matching works
 
@@ -162,19 +253,6 @@ earned a clearly positive bonus.
 - "In theaters" means on TMDB's US now-playing list when the list was built, or
   released in the last ~2 months. Films more than ~100 days old never count as in
   theaters, even if the list is stale.
-
-### Tuning
-
-The main knobs are constants at the top of `docs/app.js`:
-
-| Constant | Value | Effect |
-|---|---|---|
-| `WARMUP_ROUNDS` | 3 | Rounds of pure exploration |
-| `MIN_ROUNDS` / `MAX_ROUNDS` | 7 / 12 | Earliest and latest start of the final four |
-| `LEADER_SHARE` | 0.3 | How dominant the leader must be to end narrowing early |
-| `MAX_SHOWS` | 3 | How often one film can reappear |
-| `PERSON_MIN_FILMS` | 3 | Films needed before a person gets a bonus |
-| `PERSON_PRIOR_VAR`, `PERSON_CAP` | 0.12, 0.9 | How fast and how far person bonuses can grow |
 
 ## Credits
 
