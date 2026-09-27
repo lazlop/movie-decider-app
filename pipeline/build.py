@@ -21,6 +21,9 @@ MODEL = ROOT / "model"
 OUT = ROOT / "docs" / "movies.js"
 TOP_TAGS = 6
 SAME_TAG = 0.9   # tags this aligned in taste space are near-duplicates ("biopic" / "biography")
+NEW_DAYS = 365   # films younger than this get popularity relative to films of a similar age
+NEW_PEERS = 15   # how many films closest in age they're compared with
+POP_FLOOR = -2.5 # lowest popularity (SDs); a few limited releases sit far below the rest
 
 
 def load_model():
@@ -96,16 +99,26 @@ def main():
         Z[todo], T[todo] = Zp, Tp
 
     # Quality: TMDB score shrunk toward the mean. Popularity: votes relative to films
-    # of the same era (recent films have had less time to collect votes). The game
-    # learns a weight on quality; popularity is a boost the player sets.
+    # of the same era (recent films have had less time to collect votes). Films
+    # under a year old are still collecting votes fast, so they're compared with the
+    # films closest to them in age instead. The game learns a weight on each.
     votes = np.array([m["votes"] for m in films], dtype=np.float64)
     score = np.array([m["score"] for m in films])
     bayes = (votes * score + 300 * score.mean()) / (votes + 300)
     years = np.array([F.year_of(m) for m in films])
+    age = np.array([(today - date.fromisoformat(m["release"])).days for m in films])
     lv = np.log(votes + 1)
-    rel = np.array([lv[i] - np.median(lv[np.abs(years - years[i]) <= 2]) for i in range(len(films))])
+
+    def peers(i):
+        if age[i] < NEW_DAYS:
+            return np.argsort(np.abs(age - age[i]))[:NEW_PEERS]
+        return np.abs(years - years[i]) <= 2
+    rel = np.array([lv[i] - np.median(lv[peers(i)]) for i in range(len(films))])
     quality = zscore(bayes)
-    popularity = zscore(rel)
+    # Films that got in on TMDB's now-playing list or this year's trending ranking can
+    # have a small fraction of the votes the rest of the pool needs; without a floor
+    # those few would win every game for players who favor lesser-known films.
+    popularity = np.maximum(zscore(rel), POP_FLOOR)
 
     # How each display tag moves with each taste dimension (for "you're leaning toward…").
     Tz = (T - T.mean(0)) / (T.std(0) + 1e-9)

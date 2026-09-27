@@ -57,8 +57,16 @@ descriptive tags. That's great mood and theme data, but it stops around 2019. So
 
 **Quality and popularity.** Quality is the TMDB rating shrunk toward the mean
 (so a 9.0 from 40 votes doesn't beat an 8.5 from 20,000). Popularity is the vote
-count compared with films from the same few years (new releases haven't had time
-to collect votes). The game learns how much you care about each, separately. The
+count compared with films of the same age, since new releases haven't had time to
+collect votes: films over a year old are compared with films released within two
+years of them, and newer films with the 15 films closest to them in age (a
+film's votes climb for its first few months, so a year is too coarse). Popularity
+has a floor of −2.5 standard deviations. A few films get in with far fewer votes
+than the rest of the pool (limited releases on the now-playing list, or this
+year's trending films), and without the floor they would win nearly every game
+for players who favor lesser-known films.
+
+The game learns how much you care about quality and popularity separately. The
 start screen's **Favor: Popular / Balanced / Lesser-known** sets where the
 popularity weight starts; your picks can move it from there.
 
@@ -114,8 +122,9 @@ Things to keep in mind:
 - **Predicted profiles.** Films MovieLens never scored (mostly post-2019 and
   obscure titles) get predicted taste profiles, which are rougher. Bigger pools
   and newer-leaning steps raise that share; the build prints it ("predicting N").
-- **The warm-up** always draws from the best-known ~30% of whatever is in range,
-  so a bigger pool doesn't make the first rounds more obscure. Films shown in
+- **The warm-up** always draws from the best-known ~30% of whatever is in range
+  (by vote count, whatever the **Favor** setting), so a bigger pool doesn't make
+  the first rounds more obscure. Films shown in
   recent warm-ups on the same device are held back, and the next most-voted
   films take their place.
 
@@ -148,6 +157,8 @@ Change these, commit, and GitHub Pages serves the new behavior. No rebuild neede
 | `TOP_TAGS` | `build.py` | `6` | Rebuild. Tags stored per film (tickets show 3). |
 | `SAME_TAG` | `build.py` | `0.9` | Rebuild. Duplicate threshold for those stored tags. |
 | Quality / popularity | `build.py` | quality: rating shrunk toward the mean by 300 votes; popularity: log votes minus the median of films within 2 years. Both z-scored. | Rebuild. |
+| `NEW_DAYS` / `NEW_PEERS` | `build.py` | `365` / `15` | Rebuild. Films younger than `NEW_DAYS` get popularity relative to the `NEW_PEERS` films closest to them in age instead of their 2-year window. |
+| `POP_FLOOR` | `build.py` | `-2.5` | Rebuild. Lowest popularity score (in standard deviations). Lower it and the few films with very few votes start to dominate **Lesser-known** games. |
 | `N_CAST` | `features.py` | `3` | Retrain. Lead actors per film used for matching and prediction. |
 | `ENCODER` | `features.py` | `all-mpnet-base-v2` | Retrain. The sentence-transformer used for plots and keywords. |
 | `DIMS` | `train.py` | `24` | Retrain. Size of the taste space. |
@@ -186,7 +197,8 @@ Each movie has 26 numbers:
   The axes don't have names, but each lines up with readable tags ("dark",
   "space", "feel-good"…), which is how the game can describe your taste in words.
 - **1 quality score.** From the TMDB rating (see *Quality and popularity*).
-- **1 popularity score.** How widely seen it is for its era.
+- **1 popularity score.** How widely seen it is compared with films of the same
+  age (see *Quality and popularity*).
 
 ### What the game learns about you
 
@@ -267,6 +279,10 @@ earned a clearly positive bonus.
 - "In theaters" means on TMDB's US now-playing list when the list was built, or
   released in the last ~2 months. Films more than ~100 days old never count as in
   theaters, even if the list is stale.
+- **Favor: Popular / Balanced / Lesser-known** (Balanced by default) doesn't
+  remove any films. It sets the popularity weight the game starts with; your picks
+  can still move it. It doesn't affect the warm-up, which always shows well-known
+  films.
 
 ## Credits
 
