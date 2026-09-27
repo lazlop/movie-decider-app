@@ -96,6 +96,8 @@ def main():
         films.append(m)
     films.sort(key=lambda m: -m["votes"])
     print(f"{len(films)} released films in the pool")
+    imdb = I.ratings()
+    F.add_imdb_scores(films, imdb)
 
     meta, p, profiles, genome = load_model()
     dims, vocab = meta["dims"], meta["vocab"]
@@ -135,7 +137,6 @@ def main():
     def shrunk(s, v, k):
         k = k * (1 + YOUNG_SHRINK * np.clip(1 - age / YOUNG_DAYS, 0, 1))
         return (v * s + k * s.mean()) / (v + k)
-    imdb = I.ratings()
     iv = np.array([imdb.get(m["imdb"], (0, 0))[1] for m in films], dtype=np.float64)
     ir = np.array([imdb.get(m["imdb"], (0, 0))[0] for m in films])
     on_imdb = iv > 0

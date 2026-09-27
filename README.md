@@ -48,9 +48,14 @@ descriptive tags. That's great mood and theme data, but it stops around 2019. So
 - Every other film gets a predicted profile. A ridge regression, trained on the
   ~13,000 films in both datasets, maps TMDB data to the MovieLens scores. Its
   inputs are a sentence-transformer embedding (`all-mpnet-base-v2`) of the plot
-  and of the keyword list, keyword and genre flags, decade, and the average
-  profile of the director's and leads' other films. (Tested: including the title
-  in the encoded text, or encoding it separately, makes no measurable difference.)
+  and of the keyword list, keyword and genre flags, decade, IMDb rating, and the
+  average profile of the director's and leads' other films. (Tested: including the
+  title in the encoded text, or encoding it separately, makes no measurable
+  difference.) It deliberately leaves out TMDB's rating and vote count. The model
+  learns from films old enough for both to have settled, so a new release's
+  inflated TMDB rating read as a more serious, acclaimed film, and its few votes as
+  an obscure one. IMDb's rating doesn't have the early inflation, and dropping the
+  vote count cost nothing in held-out accuracy.
 - `model/meta.json` records the held-out accuracy of each feature set.
 - Ridge predictions huddle near the middle of the taste space, so predicted films
   would never be anyone's favorite. Each one keeps its direction but is moved out

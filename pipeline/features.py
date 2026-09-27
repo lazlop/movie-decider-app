@@ -71,12 +71,26 @@ def person_features(m, profiles, dim, own=None):
     return np.concatenate(out)
 
 
+def add_imdb_scores(films, ratings):
+    """Attach each film's IMDb rating (from imdb.ratings()) as m["imdb_score"]."""
+    for m in films:
+        m["imdb_score"] = ratings.get(m["imdb"], (None, 0))[0] if m.get("imdb") else None
+
+
 def meta_features(m):
+    """Genres, decade, rating, runtime, language, keyword count.
+
+    The rating is IMDb's where there is one (add_imdb_scores): the model learns from
+    older films whose ratings have settled, while TMDB ratings of new releases run
+    0.6-0.9 stars high. There's no vote count for the same reason: every training
+    film has had years to collect votes, so a new release's few votes would read as
+    an obscure film. Dropping it cost nothing in held-out accuracy.
+    """
     y = year_of(m)
     g = [float(x in m["genres"]) for x in TMDB_GENRES]
     dec = [float(y // 10 * 10 == d) for d in DECADES]
-    return np.array(g + dec + [np.log1p(m["votes"]) / 10, m["score"] / 10,
-                               min(m["runtime"], 240) / 120, float(m["lang"] == "en"),
+    rating = m.get("imdb_score") or m["score"]
+    return np.array(g + dec + [rating / 10, min(m["runtime"], 240) / 120, float(m["lang"] == "en"),
                                min(len(m["keywords"]), 40) / 40], dtype=np.float64)
 
 

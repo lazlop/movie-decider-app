@@ -14,6 +14,7 @@ import numpy as np
 import pandas as pd
 
 import features as F
+import imdb as I
 
 ROOT = Path(__file__).resolve().parent.parent
 RAW = ROOT / "raw" / "ml-25m"
@@ -81,6 +82,7 @@ def load():
             seen.add(m["id"])
             keep.append(i)
     films = [films[i] for i in keep]
+    F.add_imdb_scores(films, I.ratings())
     return films, G[keep], tag_names
 
 
