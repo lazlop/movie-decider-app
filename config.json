@@ -1,6 +1,6 @@
 {
   "pool": {
-    "_help": "Which films enter the game. per_year lists [from_year, films_per_year] steps: the most-voted films of each release year, up to that many. scale multiplies every step (2 = twice as many films). A film needs min_votes TMDB votes (min_votes_recent for the last two years) and a runtime of at least min_runtime minutes. Changes apply on the next build.",
+    "_help": "Which films enter the game. per_year lists [from_year, films_per_year] steps: the most-voted films of each release year, up to that many (the current year prorated by how much of it has passed). scale multiplies every step (2 = twice as many films). A film needs min_votes TMDB votes (min_votes_recent for the last two years) and a runtime of at least min_runtime minutes. Changes apply on the next build.",
     "first_year": 1920,
     "per_year": [[1920, 5], [1940, 10], [1960, 18], [1980, 30], [1990, 45]],
     "scale": 1.0,

@@ -98,7 +98,7 @@ the file in GitHub's web editor.
 
 | Setting | Default | What it does |
 |---|---|---|
-| `per_year` | see above | How many films each release year contributes, as `[from_year, count]` steps. Each step holds until the next: `[1990, 45]` means 45 films a year from 1990 on. Within a year, films are ranked by TMDB vote count (the current year by popularity, since its films are still collecting votes). |
+| `per_year` | see above | How many films each release year contributes, as `[from_year, count]` steps. Each step holds until the next: `[1990, 45]` means 45 films a year from 1990 on. Within a year, films are ranked by TMDB vote count. The current year's count is prorated by how much of the year has passed (45 becomes about 33 in late September), and up to a third of its slots go to films released in the last 60 days that are trending on TMDB, since they haven't had time to collect votes (`NEW_TRENDING_DAYS` / `NEW_TRENDING_SHARE` in `pipeline/tmdb.py`). |
 | `scale` | `1.0` | Multiplies every `per_year` count, then rounds. The quickest way to grow or shrink the whole pool. |
 | `min_votes` | `200` | TMDB votes a film needs to be considered at all. Raise it for only well-known films; lower it for deeper cuts. A year with fewer qualifying films than its count just contributes fewer. |
 | `min_runtime` | `60` | Minutes a film must run. Keeps out shorts, music videos and TV specials (*Steamboat Willie*, *Thriller*, *How the Grinch Stole Christmas!*), and the next most-voted feature takes each one's place. Films with no runtime on TMDB yet (some brand-new releases) are kept. `0` turns it off. |

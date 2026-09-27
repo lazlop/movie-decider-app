@@ -14,13 +14,15 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 CACHE = ROOT / "cache" / "tmdb"
 API = "https://api.themoviedb.org/3"
 TV_MOVIE = 10770
+NEW_TRENDING_DAYS = 60    # current-year films this new can get in by trending instead of votes
+NEW_TRENDING_SHARE = 1/3  # at most this share of the current year's slots
 
 
 def api_key():
@@ -116,7 +118,11 @@ def per_year_quota(y, cfg):
     for start, n in cfg["per_year"]:
         if y >= start:
             quota = n
-    return round(quota * cfg.get("scale", 1))
+    quota *= cfg.get("scale", 1)
+    today = date.today()
+    if y == today.year:                 # prorate the current year by how much of it has passed
+        quota *= (today - date(y, 1, 1)).days / 365
+    return round(quota)
 
 
 def discover_pool():
@@ -125,20 +131,30 @@ def discover_pool():
     this_year = date.today().year
     picks = {}
 
-    def year_ids(y):
-        quota = per_year_quota(y, cfg)
+    def discover(y, sort_by, quota):
         recent = y >= this_year - 1
-        ids, page = [], 1
-        while len(ids) < quota:
-            r = get("/discover/movie", primary_release_year=y, page=page,
-                    sort_by="popularity.desc" if y == this_year else "vote_count.desc",
+        found, page = [], 1
+        while len(found) < quota:
+            r = get("/discover/movie", primary_release_year=y, page=page, sort_by=sort_by,
                     **{"vote_count.gte": cfg["min_votes_recent"] if recent else cfg["min_votes"],
                        "with_runtime.gte": cfg.get("min_runtime", 0),
                        "without_genres": TV_MOVIE, "include_adult": "false"})
-            ids += [m["id"] for m in (r or {}).get("results", [])]
+            found += (r or {}).get("results", [])
             if not r or page >= min(r.get("total_pages", 0), 500):
                 break
             page += 1
+        return found
+
+    def year_ids(y):
+        quota = per_year_quota(y, cfg)
+        ids = [m["id"] for m in discover(y, "vote_count.desc", quota)]
+        if y == this_year:
+            # Films out for a few weeks haven't had time to collect votes, so a share
+            # of the current year's slots goes to what's trending among them.
+            cutoff = (date.today() - timedelta(days=NEW_TRENDING_DAYS)).isoformat()
+            trending = [m["id"] for m in discover(y, "popularity.desc", quota)
+                        if (m.get("release_date") or "") >= cutoff][:round(quota * NEW_TRENDING_SHARE)]
+            ids = trending + [i for i in ids if i not in trending]
         return ids[:quota]
 
     with ThreadPoolExecutor(16) as ex:
